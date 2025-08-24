@@ -16,6 +16,7 @@
         pythonEnv = python.withPackages (ps: with ps; [
           evdev   # python-evdev
           tkinter # GUI
+          pyinstaller
         ]);
       in {
         devShells.default = pkgs.mkShell {

@@ -39,8 +39,6 @@ class LatchUI:
         self.set_dev_btn = tk.Button(root, text="Clear Devices", command=self.clear_devices)
         self.set_dev_btn.pack(pady=5)
 
-
-
         # Control buttons
         self.start_btn = tk.Button(root, text="Start", command=self.start)
         self.start_btn.pack(pady=5)
