@@ -1,0 +1,24 @@
+Input latching script.
+
+Operation:
+
+1) Select input devices to monitor
+2) Start the monitoring. This will create a new virtual input to pass throught the ones you selected
+3) Pick a latch button. When this button is held new presses will remain "stuck". Tap the latch button (without latching a key) to stop all latching. Tap a key that is latched to stop latching. 
+
+#Building/running: 
+
+## on nixos:
+```
+nix develop
+
+./InputLatching.py
+
+```
+
+build with
+
+```
+pyinstaller InputLatching.py
+```
+
