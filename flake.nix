@@ -14,9 +14,9 @@
         python = pkgs.python3;
 
         pythonEnv = python.withPackages (ps: with ps; [
-          evdev   # python-evdev
-          tkinter # GUI
+          evdev
           pyinstaller
+		  pyside6
         ]);
       in {
         devShells.default = pkgs.mkShell {
@@ -26,7 +26,7 @@
           ];
 
           shellHook = ''
-            echo "Python environment ready. Run: sudo python ui.py"
+            echo "Run ui.py. sudo or input group required"
           '';
         };
       });

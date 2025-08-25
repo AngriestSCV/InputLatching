@@ -1,147 +1,192 @@
 #!/usr/bin/env python
-
-import tkinter as tk
-from tkinter import ttk
-from evdev import ecodes, InputDevice, list_devices
+from PySide6.QtCore import (
+    QObject, Signal, Slot, Property, QStringListModel, QTimer, QFileSystemWatcher,
+    QUrl
+)
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtQml import QQmlApplicationEngine
+from evdev import InputDevice, list_devices, ecodes
 from input_control import InputController
-import threading
 import datetime
-import time
+import sys
+import os
 
 
-class LatchUI:
-    def __init__(self, root):
+class Bridge(QObject):
+    devicesChanged = Signal()
+    triggerChanged = Signal()
+    latchedChanged = Signal()
+    triggerHeldChanged = Signal()
+    deviceCountChanged = Signal()
+    runningChanged = Signal()
+    logAppended = Signal(str)
+
+    def __init__(self):
+        super().__init__()
+        self._device_model = QStringListModel()
+        self.populate_devices()
+
         self.input_controller = InputController()
-        self.input_controller.on_state_change = self.update_state
+        self.input_controller.on_state_change = self.on_state_change
 
-        self.setting_trigger = False  # are we waiting for user to press trigger key?
+    @Property("QStringList", notify=devicesChanged)
+    def deviceModel(self):
+        return self._device_model.stringList()
 
-        root.title("Latch Input Tool")
-        root.geometry("500x650")
+    def populate_devices(self):
+        devs = [InputDevice(p) for p in list_devices()]
+        display = [f"{d.name} ({d.path})" for d in devs]
+        self._device_map = {f"{d.name} ({d.path})": d.path for d in devs}
+        self._device_model.setStringList(display)
+        self.devicesChanged.emit()
 
-        # Build mapping: display string -> path
-        self.devices = [InputDevice(path) for path in list_devices()]
-        self.device_map = {f"{dev.name} ({dev.path})": dev.path for dev in self.devices}
+    @Property(str, notify=triggerChanged)
+    def trigger(self):
+        return getattr(self, "_trigger", "None")
 
-        # Dropdown for devices
-        self.device_var = tk.StringVar()
-        self.device_menu = ttk.Combobox(
-            root,
-            textvariable=self.device_var,
-            values=list(self.device_map.keys()),
-            width=60
-        )
-        self.device_menu.pack(pady=5)
+    @Property(str, notify=latchedChanged)
+    def latched(self):
+        return getattr(self, "_latched", "None")
 
-        self.set_dev_btn = tk.Button(root, text="Add Device", command=self.add_device)
-        self.set_dev_btn.pack(pady=5)
+    @Property(bool, notify=triggerHeldChanged)
+    def triggerHeld(self):
+        return getattr(self, "_trigger_held", False)
 
-        self.set_dev_btn = tk.Button(root, text="Clear Devices", command=self.clear_devices)
-        self.set_dev_btn.pack(pady=5)
+    @Property(int, notify=deviceCountChanged)
+    def deviceCount(self):
+        return getattr(self, "_device_count", 0)
 
-        # Control buttons
-        self.start_btn = tk.Button(root, text="Start", command=self.start)
-        self.start_btn.pack(pady=5)
+    @Property(bool, notify=runningChanged)
+    def running(self):
+        return getattr(self, "_running", False)
 
-        self.stop_btn = tk.Button(root, text="Stop", command=self.stop)
-        self.stop_btn.pack(pady=5)
+    @Slot(str)
+    def addDevice(self, display_name: str):
+        if display_name in self._device_map:
+            p = self._device_map[display_name]
+            self.input_controller.add_device(p)
+            self.append_log(f"Added device: {display_name}")
 
-        self.set_trigger_btn = tk.Button(root, text="Set Trigger", command=self.begin_set_trigger)
-        self.set_trigger_btn.pack(pady=5)
-
-        # State labels
-        self.trigger_label = tk.Label(root, text="Trigger: None")
-        self.trigger_label.pack(pady=5)
-
-        self.latched_label = tk.Label(root, text="Latched: None")
-        self.latched_label.pack(pady=5)
-
-        self.state_label = tk.Label(root, text="Trigger Held: False")
-        self.state_label.pack(pady=5)
-
-        self.device_count_label = tk.Label(root, text="Devices: ")
-        self.device_count_label.pack(pady=5)
-
-        self.running_label = tk.Label(root, text="Running: ")
-        self.running_label.pack(pady=5)
-
-        # Logging area
-        log_frame = tk.LabelFrame(root, text="Log")
-        log_frame.pack(fill="both", expand=True, padx=5, pady=5)
-
-        self.log_text = tk.Text(log_frame, height=10, wrap="word", state="disabled")
-        self.log_text.pack(fill="both", expand=True, padx=5, pady=5)
-
-        self.clear_log_btn = tk.Button(root, text="Clear log", command=self.clear_log)
-        self.clear_log_btn.pack(pady=5)
-
-    def log(self, message: str):
-        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-        self.log_text.config(state="normal")
-        self.log_text.insert("end", f"[{timestamp}] {message}\n")
-        self.log_text.see("end")
-        self.log_text.config(state="disabled")
-
-    def clear_log(self):
-        self.log_text.config(state="normal")
-        self.log_text.delete("1.0", tk.END)
-        self.log_text.config(state="disabled")
-
-    def add_device(self):
-        dev_display = self.device_var.get()
-        if dev_display in self.device_map:
-            path = self.device_map[dev_display]
-            self.input_controller.add_device(path)
-            self.log(f"Added device: {dev_display}")
-
-    def clear_devices(self):
+    @Slot()
+    def clearDevices(self):
         self.input_controller.clear_devices()
+        self.append_log("Cleared devices")
 
+    @Slot()
     def start(self):
         try:
             self.input_controller.start()
+            self.append_log("Started input controller")
         except Exception as e:
-            self.log(f"Error starting: {e}")
+            self.append_log(f"Error starting: {e}")
 
+    @Slot()
     def stop(self):
         self.input_controller.stop()
-        self.log("Event loop stopped")
+        self.append_log("Event loop stopped")
 
-    def begin_set_trigger(self):
-        """Enable trigger capture mode."""
-        time.sleep(0.5)
-        if not self.input_controller.running:
-            self.log("Not running")
-            return
-        self.input_controller.detect_trigger = True
+    @Slot()
+    def beginSetTrigger(self):
+        def enable():
+            if not getattr(self.input_controller, "running", False):
+                self.append_log("Not running")
+                return
+            self.input_controller.detect_trigger = True
+            self.append_log("Detecting trigger...")
 
-    def update_state(self, state):
-        latched = state["latched_keys"]
-        if len(latched) > 0:
+        QTimer.singleShot(500, enable)
+
+    @Slot()
+    def refreshDevices(self):
+        self.populate_devices()
+        self.append_log("Refreshed device list")
+
+    def append_log(self, text: str):
+        ts = datetime.datetime.now().strftime("%H:%M:%S")
+        message = f"[{ts}] {text}"
+        self.logAppended.emit(message)
+
+    def on_state_change(self, state: dict):
+        latched = state.get("latched_keys", [])
+        if latched:
             names = [
                 ecodes.keys.get(code) or ecodes.BTN.get(code) or str(code)
                 for code in latched
             ]
-            latched_str = ", ".join([ str(x) for x in names ])
+            latched_str = ", ".join(str(x) for x in names)
         else:
             latched_str = "None"
 
-        self.latched_label.config(text=f"Latched: {latched_str}")
-        self.state_label.config(text=f"Trigger Held: {state['trigger_held']}")
+        code = state.get("trigger_code")
+        name = (ecodes.keys.get(code) or ecodes.BTN.get(code) or str(code))
 
-        code = state['trigger_code']
-        name = (ecodes.keys.get(code) or
-                ecodes.BTN.get(code) or
-                str(code))
-        self.trigger_label.config(text=f"Trigger: {name}")
-        self.device_count_label.config(text=f"Devices: {state['device_count']}")
-        self.running_label.config(text=f"Running: {state['running']}")
+        self._latched = latched_str
+        self.latchedChanged.emit()
 
-        self.log(f"Trigger={state['trigger_code']} Latched={latched_str} Held={state['trigger_held']}")
+        self._trigger = name
+        self.triggerChanged.emit()
 
+        self._trigger_held = bool(state.get("trigger_held", False))
+        self.triggerHeldChanged.emit()
+
+        self._device_count = int(state.get("device_count", 0))
+        self.deviceCountChanged.emit()
+
+        self._running = bool(state.get("running", False))
+        self.runningChanged.emit()
+
+        self.append_log(f"Trigger={state.get('trigger_code')} Latched={latched_str} Held={state.get('trigger_held')}")
+
+
+def watch_and_reload(engine: QQmlApplicationEngine, qml_path: str, watcher: QFileSystemWatcher):
+    """
+    Add the qml_path to watcher and connect change events to a debounced reload.
+    """
+    # ensure absolute path and URL
+    qml_path = os.path.abspath(qml_path)
+    url = QUrl.fromLocalFile(qml_path)
+
+    # Keep a single-shot timer for debounce
+    debounce_timer = QTimer()
+    debounce_timer.setSingleShot(True)
+    debounce_timer.setInterval(200)  # ms
+
+    def do_reload():
+        # delete existing root objects
+        for obj in list(engine.rootObjects()):
+            obj.deleteLater()
+        # clear QML caches and reload
+        engine.clearComponentCache()
+        engine.load(url)
+
+    def on_file_changed(path):
+        # file change events can come in quickly; debounce them
+        debounce_timer.start()
+
+    debounce_timer.timeout.connect(do_reload)
+
+    # Add file to watcher (ignore duplicates)
+    paths = watcher.files()
+    if qml_path not in paths:
+        watcher.addPath(qml_path)
+    watcher.fileChanged.connect(on_file_changed)
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = LatchUI(root)
-    root.mainloop()
+    app = QGuiApplication(sys.argv)
+    engine = QQmlApplicationEngine()
+
+    bridge = Bridge()
+    engine.rootContext().setContextProperty("bridge", bridge)
+
+    qml_file = "main.qml"
+    qml_url = QUrl.fromLocalFile(os.path.abspath(qml_file))
+    engine.load(qml_url)
+    if not engine.rootObjects():
+        sys.exit(-1)
+
+    # Setup file watcher for hot reload
+    watcher = QFileSystemWatcher()
+    watch_and_reload(engine, qml_file, watcher)
+
+    sys.exit(app.exec())
