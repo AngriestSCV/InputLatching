@@ -26,7 +26,7 @@
           ];
 
           shellHook = ''
-            echo "Run ui.py. sudo or input group required"
+            echo "Run InputLatching.py. sudo or input group required"
           '';
         };
       });

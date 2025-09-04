@@ -178,8 +178,12 @@ if __name__ == "__main__":
 
     bridge = Bridge()
     engine.rootContext().setContextProperty("bridge", bridge)
+    
+    if os.path.isdir("_internal"):
+        qml_file = "_internal/main.qml"
+    else:
+        qml_file = "main.qml"
 
-    qml_file = "main.qml"
     qml_url = QUrl.fromLocalFile(os.path.abspath(qml_file))
     engine.load(qml_url)
     if not engine.rootObjects():
