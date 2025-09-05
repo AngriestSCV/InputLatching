@@ -19,9 +19,9 @@ pkgs.stdenv.mkDerivation {
   ];
 
   # No building step; just install files and create a wrapper binary.
-  #buildPhase = ''
-  #  echo "Nothing to build"
-  #'';
+  buildPhase = ''
+    rm -rf result
+  '';
 
   installPhase = ''
     mkdir -p $out/lib/${pname}-${version}
@@ -29,15 +29,18 @@ pkgs.stdenv.mkDerivation {
     mkdir -p $out/bin
 
     cat > $out/bin/${pname} <<'EOF'
-    #!${py}/bin/python3
-    import os, sys, runpy
-    # Add our package dir to sys.path
-    pkgdir = os.path.join(os.path.dirname(__file__), "..", "lib", "${pname}-${version}")
-    sys.path.insert(0, pkgdir)
-    # If your entry is main.py that runs as script, use runpy to execute it
-    runpy.run_path(os.path.join(pkgdir, "main.py"), run_name="__main__")
-    EOF
-    chmod +x $out/bin/${pname}
+#!${py}/bin/python3
+
+import os, sys, runpy
+# Add our package dir to sys.path
+pkgdir = os.path.join(os.path.dirname(__file__), "..", "lib", "${pname}-${version}")
+sys.path.insert(0, pkgdir)
+# print("Current path: ", sys.path)
+runpy.run_path(os.path.join(pkgdir, "InputLatching.py"), run_name="__main__")
+
+EOF
+
+    chmod a+x $out/bin/${pname}
 
     # Wrap the script to ensure PYTHONPATH/PATH include needed runtime libs
     wrapProgram $out/bin/${pname} \
@@ -48,7 +51,7 @@ pkgs.stdenv.mkDerivation {
   # metadata
   meta = with pkgs.lib; {
     description = "Input latching GUI (PySide6) - local development build";
-    license = licenses.mit;
+    license = licenses.gpl3;
     maintainers = with maintainers; [ ];
   };
 }
