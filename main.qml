@@ -95,8 +95,7 @@ ApplicationWindow {
     Connections {
         target: bridge
         function onLogAppended(message) {
-            if (logArea.length > 0) logArea.append("\n" + message)
-            else logArea.append(message)
+            logArea.append(message)
             // auto-scroll: put cursor at end
             logArea.cursorPosition = logArea.length
         }
