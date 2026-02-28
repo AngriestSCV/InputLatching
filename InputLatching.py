@@ -243,4 +243,6 @@ if __name__ == "__main__":
     watcher = QFileSystemWatcher()
     watch_and_reload(engine, qml_file, watcher, {"bridge": bridge})
 
-    sys.exit(app.exec())
+    ret = app.exec()
+    del engine
+    sys.exit(ret)
