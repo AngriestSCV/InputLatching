@@ -8,8 +8,12 @@ from PySide6.QtQml import QQmlApplicationEngine
 from evdev import InputDevice, list_devices, ecodes
 from input_control import InputController
 import datetime
+import json
 import sys
 import os
+
+_config_home = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
+CONFIG_PATH = os.path.join(_config_home, "input-latching", "devices.json")
 
 
 class Bridge(QObject):
@@ -28,6 +32,8 @@ class Bridge(QObject):
 
         self.input_controller = InputController()
         self.input_controller.on_state_change = self.on_state_change
+
+        QTimer.singleShot(0, self.load_devices)
 
     @Property("QStringList", notify=devicesChanged)
     def deviceModel(self):
@@ -60,17 +66,46 @@ class Bridge(QObject):
     def running(self):
         return getattr(self, "_running", False)
 
+    def save_devices(self):
+        saved = [{"name": d.name, "phys": d.phys} for d in self.input_controller.devices]
+        os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
+        with open(CONFIG_PATH, "w") as f:
+            json.dump({"devices": saved}, f)
+
+    def load_devices(self):
+        if not os.path.exists(CONFIG_PATH):
+            return
+        try:
+            with open(CONFIG_PATH) as f:
+                data = json.load(f)
+            current = [InputDevice(p) for p in list_devices()]
+            lookup = {(d.name, d.phys): d.path for d in current}
+            for entry in data.get("devices", []):
+                key = (entry["name"], entry["phys"])
+                if key in lookup:
+                    try:
+                        self.input_controller.add_device(lookup[key])
+                        self.append_log(f"Restored device: {entry['name']}")
+                    except Exception as ex:
+                        self.append_log(f"Could not restore {entry['name']}: {ex}")
+                else:
+                    self.append_log(f"Device not found: {entry['name']}")
+        except Exception as ex:
+            self.append_log(f"Could not load saved devices: {ex}")
+
     @Slot(str)
     def addDevice(self, display_name: str):
         if display_name in self._device_map:
             p = self._device_map[display_name]
             self.input_controller.add_device(p)
             self.append_log(f"Added device: {display_name}")
+            self.save_devices()
 
     @Slot()
     def clearDevices(self):
         self.input_controller.clear_devices()
         self.append_log("Cleared devices")
+        self.save_devices()
 
     @Slot()
     def start(self):
