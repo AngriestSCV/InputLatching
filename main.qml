@@ -50,7 +50,12 @@ ApplicationWindow {
                 Label { text: "Trigger: " + bridge.trigger }
                 Label { text: "Latched: " + bridge.latched }
                 Label { text: "Trigger Held: " + (bridge.triggerHeld ? "True" : "False") }
-                Label { text: "Devices: " + bridge.deviceCount }
+                Label { text: "Devices:" }
+                Repeater {
+                    model: bridge.loadedDevices
+                    Label { leftPadding: 12; text: modelData }
+                }
+                Label { leftPadding: 12; text: "None"; visible: bridge.loadedDevices.length === 0 }
                 Label { text: "Running: " + (bridge.running ? "True" : "False") }
             }
         }

@@ -17,13 +17,18 @@ class Bridge(QObject):
     triggerChanged = Signal()
     latchedChanged = Signal()
     triggerHeldChanged = Signal()
-    deviceCountChanged = Signal()
+    loadedDevicesChanged = Signal()
     runningChanged = Signal()
     logAppended = Signal(str)
 
     def __init__(self):
         super().__init__()
         self._device_model = QStringListModel()
+        self._loaded_devices = []
+        self._trigger = "None"
+        self._latched = "None"
+        self._trigger_held = False
+        self._running = False
         self.populate_devices()
 
         self.input_controller = InputController()
@@ -42,34 +47,38 @@ class Bridge(QObject):
 
     @Property(str, notify=triggerChanged)
     def trigger(self):
-        return getattr(self, "_trigger", "None")
+        return self._trigger
 
     @Property(str, notify=latchedChanged)
     def latched(self):
-        return getattr(self, "_latched", "None")
+        return self._latched
 
     @Property(bool, notify=triggerHeldChanged)
     def triggerHeld(self):
-        return getattr(self, "_trigger_held", False)
+        return self._trigger_held
 
-    @Property(int, notify=deviceCountChanged)
-    def deviceCount(self):
-        return getattr(self, "_device_count", 0)
+    @Property("QStringList", notify=loadedDevicesChanged)
+    def loadedDevices(self):
+        return self._loaded_devices
 
     @Property(bool, notify=runningChanged)
     def running(self):
-        return getattr(self, "_running", False)
+        return self._running
 
     @Slot(str)
     def addDevice(self, display_name: str):
         if display_name in self._device_map:
             p = self._device_map[display_name]
             self.input_controller.add_device(p)
+            self._loaded_devices.append(display_name)
+            self.loadedDevicesChanged.emit()
             self.append_log(f"Added device: {display_name}")
 
     @Slot()
     def clearDevices(self):
         self.input_controller.clear_devices()
+        self._loaded_devices = []
+        self.loadedDevicesChanged.emit()
         self.append_log("Cleared devices")
 
     @Slot()
@@ -128,9 +137,6 @@ class Bridge(QObject):
 
         self._trigger_held = bool(state.get("trigger_held", False))
         self.triggerHeldChanged.emit()
-
-        self._device_count = int(state.get("device_count", 0))
-        self.deviceCountChanged.emit()
 
         self._running = bool(state.get("running", False))
         self.runningChanged.emit()
