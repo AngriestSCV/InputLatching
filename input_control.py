@@ -27,8 +27,9 @@ class InputController:
         # Create the UInput device
         self.ui = UInput(caps, name="Latcher", version=0x3)
 
-        # GUI callback
+        # GUI callbacks
         self.on_state_change = None
+        self.on_log = None
 
     def build_keyboard_mouse_capabilities(self):
         # collect all KEY_ and BTN_ codes
@@ -96,7 +97,7 @@ class InputController:
         self.clear_latches()
 
         for t in self.threads:
-            print("Joining input worker thread")
+            self._log("Joining input worker thread")
             t.join()
 
     def clear_latches(self):
@@ -105,6 +106,10 @@ class InputController:
         self.latched_keys.clear()
         self._update_state()
         self.ui.syn()
+
+    def _log(self, msg):
+        if self.on_log:
+            self.on_log(msg)
 
     def _update_state(self):
         if self.on_state_change:
@@ -118,7 +123,7 @@ class InputController:
             self.on_state_change(state)
 
     def _event_loop(self, device):
-        print("Event loop started")
+        self._log("Event loop started")
 
         try:
             try:
@@ -128,7 +133,7 @@ class InputController:
             for event in device.read_loop():
                 #event = device.read_one()
                 if not self.running:
-                    print("Exiting event loop")
+                    self._log("Exiting event loop")
                     break
                 if event is None:
                     continue
@@ -189,12 +194,11 @@ class InputController:
 
         except Exception as ex:
             import traceback
-            print("Error reading device")
-            traceback.print_exc()
+            self._log("Error reading device: " + traceback.format_exc())
 
         finally:
             try:
-                print("Attempting to ungrab device")
+                self._log("Attempting to ungrab device")
                 device.ungrab()
             except Exception:
                 pass

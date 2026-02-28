@@ -37,6 +37,7 @@ class Bridge(QObject):
 
         self.input_controller = InputController()
         self.input_controller.on_state_change = self.on_state_change
+        self.input_controller.on_log = self.append_log
 
         QTimer.singleShot(0, self.load_devices)
 
