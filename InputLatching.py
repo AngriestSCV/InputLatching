@@ -220,10 +220,12 @@ if __name__ == "__main__":
     bridge = Bridge()
     engine.rootContext().setContextProperty("bridge", bridge)
     
-    if os.path.isdir("_internal"):
-        qml_file = "_internal/main.qml"
+    if getattr(sys, "frozen", False):
+        # PyInstaller bundle: resources are extracted to sys._MEIPASS
+        qml_file = os.path.join(sys._MEIPASS, "main.qml")
     else:
-        qml_file = "main.qml"
+        # Dev or Nix install: main.qml lives next to this script
+        qml_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "main.qml")
 
     qml_url = QUrl.fromLocalFile(os.path.abspath(qml_file))
     engine.load(qml_url)
