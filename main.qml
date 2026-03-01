@@ -57,6 +57,12 @@ ApplicationWindow {
                 }
                 Label { leftPadding: 12; text: "None"; visible: bridge.loadedDevices.length === 0 }
                 Label { text: "Running: " + (bridge.running ? "True" : "False") }
+                Label { text: "Auto-clicking:" }
+                Repeater {
+                    model: bridge.autoClickKeys
+                    Label { leftPadding: 12; text: modelData }
+                }
+                Label { leftPadding: 12; text: "None"; visible: bridge.autoClickKeys.length === 0 }
             }
         }
 

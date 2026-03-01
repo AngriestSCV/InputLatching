@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from _collections_abc import dict_items
 import enum
 import random
 import threading
@@ -128,7 +129,7 @@ class InputController:
     def _update_state(self):
         if self.on_state_change:
             with self._auto_click_lock:
-                auto_keys = list(self.auto_click_states.keys())
+                auto_keys: list[tuple[int, AutoClickState]] = list(self.auto_click_states.items())
             state = {
                 "latched_keys": list(self.latched_keys),
                 "trigger_held": self.trigger_held,

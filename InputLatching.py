@@ -6,11 +6,13 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
 from evdev import InputDevice, list_devices, ecodes
+from auto_clicker import AutoClickState
 from input_control import InputController
 import datetime
 import json
 import sys
 import os
+from _collections_abc import dict_items
 
 _config_home = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
 CONFIG_PATH = os.path.join(_config_home, "input-latching", "devices.json")
@@ -23,6 +25,7 @@ class Bridge(QObject):
     triggerHeldChanged = Signal()
     loadedDevicesChanged = Signal()
     runningChanged = Signal()
+    autoClickKeysChanged = Signal()
     logAppended = Signal(str)
 
     def __init__(self):
@@ -33,6 +36,7 @@ class Bridge(QObject):
         self._latched = "None"
         self._trigger_held = False
         self._running = False
+        self._auto_click_keys = []
         self.populate_devices()
 
         self.input_controller = InputController()
@@ -71,6 +75,10 @@ class Bridge(QObject):
     @Property(bool, notify=runningChanged)
     def running(self):
         return self._running
+
+    @Property("QStringList", notify=autoClickKeysChanged)
+    def autoClickKeys(self):
+        return self._auto_click_keys
 
     def save_devices(self):
         saved = [{"name": d.name, "phys": d.phys} for d in self.input_controller.devices]
@@ -180,6 +188,22 @@ class Bridge(QObject):
 
         self._running = bool(state.get("running", False))
         self.runningChanged.emit()
+
+
+        ac_keys: list[tuple[int, AutoClickState]] = state.get("auto_click_keys", [])
+
+        auto_click = []
+        for pair in ac_keys:
+            code: int = pair[0]
+            ac_state: AutoClickState = pair[1]
+
+            code_str = str(ecodes.keys.get(code) or ecodes.BTN.get(code) or code)
+            mean = ac_state.pattern.mean_interval
+            next = f"{code_str} @ {mean*1000:.1f} ms +- {ac_state.pattern.std_interval*1000:.1f}ms"
+            auto_click.append(next)
+
+        self._auto_click_keys = auto_click
+        self.autoClickKeysChanged.emit()
 
         self.append_log(f"Trigger={state.get('trigger_code')} Latched={latched_str} Held={state.get('trigger_held')}")
 
