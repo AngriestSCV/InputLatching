@@ -295,19 +295,57 @@ ApplicationWindow {
                     }
                 }
 
-                ScrollView {
+                Item {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    clip: true
-                    TextArea {
-                        id: logArea
-                        readOnly: true
-                        wrapMode: Text.Wrap
-                        color: "#6e8faa"
-                        font.family: "monospace"
-                        font.pixelSize: 11
-                        background: null
-                        leftPadding: 0
+
+                    Flickable {
+                        id: logFlick
+                        anchors { fill: parent; rightMargin: 10 }
+                        contentWidth: width
+                        contentHeight: logArea.implicitHeight
+                        clip: true
+                        boundsBehavior: Flickable.StopAtBounds
+
+                        TextArea {
+                            id: logArea
+                            width: logFlick.width
+                            readOnly: true
+                            wrapMode: Text.Wrap
+                            color: "#6e8faa"
+                            font.family: "monospace"
+                            font.pixelSize: 11
+                            background: null
+                            leftPadding: 0
+                        }
+
+                        onContentHeightChanged:
+                            contentY = Math.max(0, contentHeight - height)
+                    }
+
+                    // Scrollbar track
+                    Rectangle {
+                        anchors { right: parent.right; top: parent.top; bottom: parent.bottom }
+                        width: 5
+                        radius: 3
+                        color: Qt.rgba(clrDim.r, clrDim.g, clrDim.b, 0.12)
+                        visible: logFlick.contentHeight > logFlick.height
+
+                        // Thumb
+                        Rectangle {
+                            property real ratio:  logFlick.height / Math.max(logFlick.contentHeight, 1)
+                            property real thumbH: Math.max(24, ratio * parent.height)
+                            property real travel: logFlick.contentHeight - logFlick.height
+
+                            x: 0
+                            width: parent.width
+                            height: thumbH
+                            radius: 3
+                            y: travel > 0
+                               ? (logFlick.contentY / travel) * (parent.height - thumbH)
+                               : 0
+                            color: Qt.rgba(clrDim.r, clrDim.g, clrDim.b, 0.7)
+                        }
                     }
                 }
             }
@@ -318,7 +356,6 @@ ApplicationWindow {
         target: bridge
         function onLogAppended(message) {
             logArea.append(message)
-            logArea.cursorPosition = logArea.length
         }
     }
 }
