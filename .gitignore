@@ -4,6 +4,7 @@ flake.lock
 build/
 dist/
 ui.spec
+result
 
 **blend1
 **.swp
