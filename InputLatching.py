@@ -3,7 +3,7 @@ from PySide6.QtCore import (
     QObject, Signal, Slot, Property, QStringListModel, QTimer, QFileSystemWatcher,
     QUrl
 )
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtQml import QQmlApplicationEngine
 from evdev import InputDevice, list_devices, ecodes
 from auto_clicker import AutoClickState
@@ -251,13 +251,18 @@ if __name__ == "__main__":
 
     bridge = Bridge()
     engine.rootContext().setContextProperty("bridge", bridge)
-    
+
     if getattr(sys, "frozen", False):
         # PyInstaller bundle: resources are extracted to sys._MEIPASS
-        qml_file = os.path.join(sys._MEIPASS, "main.qml")
+        base_dir = sys._MEIPASS
     else:
-        # Dev or Nix install: main.qml lives next to this script
-        qml_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "main.qml")
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+
+    icon_file = os.path.join(base_dir, "resources", "icon.png")
+    if os.path.exists(icon_file):
+        app.setWindowIcon(QIcon(icon_file))
+
+    qml_file = os.path.join(base_dir, "main.qml")
 
     qml_url = QUrl.fromLocalFile(os.path.abspath(qml_file))
     engine.load(qml_url)
