@@ -90,7 +90,11 @@ class Bridge(QObject):
                 key = (entry["name"], entry["phys"])
                 if key in lookup:
                     try:
-                        self.input_controller.add_device(lookup[key])
+                        path = lookup[key]
+                        self.input_controller.add_device(path)
+                        display_name = f"{entry['name']} ({path})"
+                        self._loaded_devices.append(display_name)
+                        self.loadedDevicesChanged.emit()
                         self.append_log(f"Restored device: {entry['name']}")
                     except Exception as ex:
                         self.append_log(f"Could not restore {entry['name']}: {ex}")
@@ -180,7 +184,7 @@ class Bridge(QObject):
         self.append_log(f"Trigger={state.get('trigger_code')} Latched={latched_str} Held={state.get('trigger_held')}")
 
 
-def watch_and_reload(engine: QQmlApplicationEngine, qml_path: str, watcher: QFileSystemWatcher):
+def watch_and_reload(engine: QQmlApplicationEngine, qml_path: str, watcher: QFileSystemWatcher, context_props: dict = None):
     """
     Add the qml_path to watcher and connect change events to a debounced reload.
     """
@@ -197,8 +201,11 @@ def watch_and_reload(engine: QQmlApplicationEngine, qml_path: str, watcher: QFil
         # delete existing root objects
         for obj in list(engine.rootObjects()):
             obj.deleteLater()
-        # clear QML caches and reload
+        # clear QML caches and re-register context properties before reload
         engine.clearComponentCache()
+        if context_props:
+            for name, obj in context_props.items():
+                engine.rootContext().setContextProperty(name, obj)
         engine.load(url)
 
     def on_file_changed(path):
@@ -221,10 +228,12 @@ if __name__ == "__main__":
     bridge = Bridge()
     engine.rootContext().setContextProperty("bridge", bridge)
     
-    if os.path.isdir("_internal"):
-        qml_file = "_internal/main.qml"
+    if getattr(sys, "frozen", False):
+        # PyInstaller bundle: resources are extracted to sys._MEIPASS
+        qml_file = os.path.join(sys._MEIPASS, "main.qml")
     else:
-        qml_file = "main.qml"
+        # Dev or Nix install: main.qml lives next to this script
+        qml_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "main.qml")
 
     qml_url = QUrl.fromLocalFile(os.path.abspath(qml_file))
     engine.load(qml_url)
@@ -233,6 +242,8 @@ if __name__ == "__main__":
 
     # Setup file watcher for hot reload
     watcher = QFileSystemWatcher()
-    watch_and_reload(engine, qml_file, watcher)
+    watch_and_reload(engine, qml_file, watcher, {"bridge": bridge})
 
-    sys.exit(app.exec())
+    ret = app.exec()
+    del engine
+    sys.exit(ret)
