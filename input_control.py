@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 
 import enum
+import random
 import threading
 import evdev
 from evdev import UInput, ecodes as e
 import time
+
+from auto_clicker import ClickTracker, AutoClickState
 
 KEY_UP = 0
 KEY_DOWN = 1
@@ -22,6 +25,10 @@ class InputController:
         self.trigger_held = False
         self.new_latches = set()
         self.threads = []
+
+        self.key_trackers: dict[int, ClickTracker] = {}
+        self.auto_click_states: dict[int, AutoClickState] = {}
+        self._auto_click_lock = threading.Lock()
 
         caps = self.build_keyboard_mouse_capabilities()
         # Create the UInput device
@@ -91,6 +98,7 @@ class InputController:
         self.running = True
         for d in self.devices:
             threading.Thread(target=self._event_loop, daemon=True, args=[d]).start()
+        threading.Thread(target=self._auto_click_loop, daemon=True).start()
 
     def stop(self):
         self.running = False
@@ -104,6 +112,12 @@ class InputController:
         for k in self.latched_keys:
             self.ui.write(e.EV_KEY, k, KEY_UP)
         self.latched_keys.clear()
+        with self._auto_click_lock:
+            for k, state in self.auto_click_states.items():
+                if state.holding:
+                    self.ui.write(e.EV_KEY, k, KEY_UP)
+            self.auto_click_states.clear()
+        self.key_trackers.clear()
         self._update_state()
         self.ui.syn()
 
@@ -113,14 +127,46 @@ class InputController:
 
     def _update_state(self):
         if self.on_state_change:
+            with self._auto_click_lock:
+                auto_keys = list(self.auto_click_states.keys())
             state = {
                 "latched_keys": list(self.latched_keys),
                 "trigger_held": self.trigger_held,
                 "trigger_code": self.trigger_code,
                 "device_count": len(self.devices),
                 "running": self.running,
+                "auto_click_keys": auto_keys,
             }
             self.on_state_change(state)
+
+    def _start_auto_click(self, key, pattern, now):
+        ac_state = AutoClickState(pattern=pattern).activate(now, random.gauss(0, 1))
+        with self._auto_click_lock:
+            self.auto_click_states[key] = ac_state
+        self._log(f"Auto-clicking key {key} every ~{pattern.mean_interval:.3f}s")
+
+    def _auto_click_loop(self):
+        while self.running:
+            now = time.monotonic()
+            to_press = []
+            to_release = []
+            with self._auto_click_lock:
+                for key, state in list(self.auto_click_states.items()):
+                    new_state, should_press, should_release = state.tick(
+                        now, random.gauss(0, 1), random.gauss(0, 1)
+                    )
+                    self.auto_click_states[key] = new_state
+                    if should_press:
+                        to_press.append(key)
+                    if should_release:
+                        to_release.append(key)
+            for key in to_release:
+                self.ui.write(e.EV_KEY, key, KEY_UP)
+            for key in to_press:
+                self.ui.write(e.EV_KEY, key, KEY_DOWN)
+            if to_press or to_release:
+                self.ui.syn()
+            time.sleep(0.005)
 
     def _event_loop(self, device):
         self._log("Event loop started")
@@ -169,15 +215,32 @@ class InputController:
 
                 # --- Latching logic ---
                 elif self.trigger_held and val == KEY_DOWN:
-                    self.latched_keys.add(key)
-                    self.ui.write(e.EV_KEY, key, KEY_DOWN)
-                    self.new_latches.add(key)
+                    tracker = self.key_trackers.get(key, ClickTracker())
+                    self.key_trackers[key] = tracker.record_down(time.monotonic())
 
-                    self._update_state()
-                    self.ui.syn()
+                    if key not in self.latched_keys and key not in self.auto_click_states:
+                        # First press: latch
+                        self.latched_keys.add(key)
+                        self.ui.write(e.EV_KEY, key, KEY_DOWN)
+                        self.new_latches.add(key)
+                        self._update_state()
+                        self.ui.syn()
+                    # 2nd/3rd+ press on already-latched key: down recorded, wait for KEY_UP
 
                 if key in self.latched_keys:
                     if self.trigger_held:
+                        if val == KEY_UP and key in self.key_trackers:
+                            tracker = self.key_trackers[key]
+                            tracker, pattern = tracker.record_up(time.monotonic())
+                            self.key_trackers[key] = tracker
+                            if pattern is not None:
+                                # Triple-click: upgrade latch → auto-click
+                                self.latched_keys.remove(key)
+                                self.ui.write(e.EV_KEY, key, KEY_UP)
+                                self._start_auto_click(key, pattern, time.monotonic())
+                                self.new_latches.add(key)
+                                self._update_state()
+                                self.ui.syn()
                         continue
                     if val == KEY_UP:
                         #print("Unlatching key", e.EV_KEY)
@@ -185,6 +248,9 @@ class InputController:
                         self.ui.write(e.EV_KEY, key, KEY_UP)
                         self._update_state()
                         self.ui.syn()
+
+                elif key in self.auto_click_states:
+                    continue  # swallow real events for auto-clicking keys
 
                 else:
                     # pass through normal events
