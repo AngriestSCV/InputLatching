@@ -32,18 +32,16 @@ class ClickTracker:
     press_times: Tuple[float, ...] = ()      # KEY_DOWN timestamps of completed presses
     hold_durations: Tuple[float, ...] = ()   # hold durations of completed presses (parallel)
     pending_down: Optional[float] = None     # KEY_DOWN timestamp of in-progress press
-    max_interval: float = 0.5
 
     def __str__(self) -> str:
         n = len(self.press_times)
-        return f"ClickTracker({n} press{'es' if n != 1 else ''}, window={self.max_interval*1000:.0f}ms)"
+        return f"ClickTracker({n} press{'es' if n != 1 else ''})"
 
     def record_down(self, timestamp: float) -> ClickTracker:
         return ClickTracker(
             press_times=self.press_times,
             hold_durations=self.hold_durations,
             pending_down=timestamp,
-            max_interval=self.max_interval,
         )
 
     def record_up(self, timestamp: float) -> Tuple[ClickTracker, Optional[ClickPattern]]:
@@ -52,21 +50,16 @@ class ClickTracker:
         hold = timestamp - self.pending_down
         down_time = self.pending_down
 
-        cutoff = down_time - 3 * self.max_interval
-        keep = [(t, h) for t, h in zip(self.press_times, self.hold_durations) if t >= cutoff]
-        new_times = tuple(t for t, h in keep) + (down_time,)
-        new_holds = tuple(h for t, h in keep) + (hold,)
+        new_times = self.press_times + (down_time,)
+        new_holds = self.hold_durations + (hold,)
 
         if len(new_times) < 3:
             return ClickTracker(press_times=new_times, hold_durations=new_holds,
-                                pending_down=None, max_interval=self.max_interval), None
+                                pending_down=None), None
 
         t1, t2, t3 = new_times[-3], new_times[-2], new_times[-1]
         i1 = t2 - t1
         i2 = t3 - t2
-        if i1 > self.max_interval or i2 > self.max_interval:
-            return ClickTracker(press_times=new_times, hold_durations=new_holds,
-                                pending_down=None, max_interval=self.max_interval), None
 
         mean_i = (i1 + i2) / 2
         std_i = math.sqrt(((i1 - mean_i) ** 2 + (i2 - mean_i) ** 2) / 2)
@@ -77,8 +70,7 @@ class ClickTracker:
 
         pattern = ClickPattern(mean_interval=mean_i, std_interval=std_i,
                                mean_hold=mean_h, std_hold=std_h)
-        return ClickTracker(press_times=(), hold_durations=(), pending_down=None,
-                            max_interval=self.max_interval), pattern
+        return ClickTracker(press_times=(), hold_durations=(), pending_down=None), pattern
 
 
 @dataclass(frozen=True)
