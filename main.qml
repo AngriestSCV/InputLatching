@@ -262,7 +262,24 @@ ApplicationWindow {
                 SectionLabel { text: "DEVICES" }
                 Repeater {
                     model: bridge.loadedDevices
-                    Label { text: modelData; color: clrText; font.pixelSize: 12 }
+                    RowLayout {
+                        spacing: 6
+                        Layout.fillWidth: true
+                        Label {
+                            text: modelData
+                            color: clrText
+                            font.pixelSize: 12
+                            Layout.fillWidth: true
+                            elide: Text.ElideMiddle
+                        }
+                        AppButton {
+                            text: "✕"
+                            tint: clrRed
+                            implicitWidth: 28
+                            implicitHeight: 22
+                            onClicked: bridge.removeDevice(modelData)
+                        }
+                    }
                 }
                 Label {
                     visible: bridge.loadedDevices.length === 0

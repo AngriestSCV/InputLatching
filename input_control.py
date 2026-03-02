@@ -88,6 +88,21 @@ class InputController:
         self.devices.append(dev)
         self._update_state()
 
+    def remove_device(self, path):
+        for dev in list(self.devices):
+            if dev.path == path:
+                self.devices.remove(dev)
+                try:
+                    dev.ungrab()
+                except Exception:
+                    pass
+                try:
+                    dev.close()
+                except Exception:
+                    pass
+                self._update_state()
+                break
+
     def clear_devices(self):
         self.stop()
         self.devices.clear()

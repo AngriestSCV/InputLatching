@@ -121,6 +121,17 @@ class Bridge(QObject):
             self.append_log(f"Added device: {display_name}")
             self.save_devices()
 
+    @Slot(str)
+    def removeDevice(self, display_name: str):
+        path = self._device_map.get(display_name)
+        if path:
+            self.input_controller.remove_device(path)
+        if display_name in self._loaded_devices:
+            self._loaded_devices.remove(display_name)
+            self.loadedDevicesChanged.emit()
+            self.append_log(f"Removed device: {display_name}")
+            self.save_devices()
+
     @Slot()
     def clearDevices(self):
         self.input_controller.clear_devices()
