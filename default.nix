@@ -46,6 +46,14 @@ EOF
     wrapProgram $out/bin/${pname} \
       --set PYTHONPATH "$out/lib/${pname}-${version}:$PYTHONPATH"
 
+    # Install desktop entry
+    mkdir -p $out/share/applications
+    cp ${pname}.desktop $out/share/applications/
+
+    # Install icon
+    mkdir -p $out/share/icons/hicolor/256x256/apps
+    cp resources/icon.png $out/share/icons/hicolor/256x256/apps/${pname}.png
+
   '';
 
   # metadata

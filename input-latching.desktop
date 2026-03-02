@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Input Latching
+Comment=Latch keyboard and mouse inputs
+Exec=input-latching
+Icon=input-latching
+Type=Application
+Categories=Utility;Accessibility;
+Terminal=false
