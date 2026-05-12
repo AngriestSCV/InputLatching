@@ -8,6 +8,7 @@ from PySide6.QtQml import QQmlApplicationEngine
 from evdev import InputDevice, list_devices, ecodes
 from auto_clicker import AutoClickState
 from input_control import InputController
+from rjoy_bridge import RJoyBridge
 import datetime
 import json
 import sys
@@ -263,6 +264,9 @@ if __name__ == "__main__":
     bridge = Bridge()
     engine.rootContext().setContextProperty("bridge", bridge)
 
+    rjoy_bridge = RJoyBridge()
+    engine.rootContext().setContextProperty("rjoyBridge", rjoy_bridge)
+
     if getattr(sys, "frozen", False):
         # PyInstaller bundle: resources are extracted to sys._MEIPASS
         base_dir = sys._MEIPASS
@@ -282,7 +286,7 @@ if __name__ == "__main__":
 
     # Setup file watcher for hot reload
     watcher = QFileSystemWatcher()
-    watch_and_reload(engine, qml_file, watcher, {"bridge": bridge})
+    watch_and_reload(engine, qml_file, watcher, {"bridge": bridge, "rjoyBridge": rjoy_bridge})
 
     ret = app.exec()
     del engine

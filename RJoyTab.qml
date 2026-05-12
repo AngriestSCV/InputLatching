@@ -4,6 +4,21 @@ import QtQuick.Layouts 1.15
 import "." 1.0
 
 Item {
+    function fmtBytes(n) {
+        if (n < 1024) return n + " B"
+        if (n < 1048576) return (n / 1024).toFixed(1) + " KB"
+        return (n / 1048576).toFixed(1) + " MB"
+    }
+
+    function fmtUptime(secs) {
+        var s = Math.floor(secs)
+        var m = Math.floor(s / 60)
+        var h = Math.floor(m / 60)
+        if (h > 0) return h + "h " + (m % 60) + "m " + (s % 60) + "s"
+        if (m > 0) return m + "m " + (s % 60) + "s"
+        return s + "s"
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 14
@@ -66,8 +81,18 @@ Item {
         RowLayout {
             spacing: 8
             Layout.fillWidth: true
-            AppButton { text: "▶  Start Server"; tint: Theme.clrGreen; Layout.fillWidth: true }
-            AppButton { text: "■  Stop Server";  tint: Theme.clrRed;   Layout.fillWidth: true }
+            AppButton {
+                text: "▶  Start Server"
+                tint: Theme.clrGreen
+                Layout.fillWidth: true
+                onClicked: rjoyBridge.startServer(rjoyHost.text, parseInt(rjoyPort.text))
+            }
+            AppButton {
+                text: "■  Stop Server"
+                tint: Theme.clrRed
+                Layout.fillWidth: true
+                onClicked: rjoyBridge.stopServer()
+            }
         }
 
         // ── Status card ───────────────────────────────────────────────────────
@@ -86,8 +111,16 @@ Item {
 
                 RowLayout {
                     spacing: 8
-                    StatusPill { active: false; label: active ? "Running" : "Stopped"; activeColor: Theme.clrGreen }
-                    StatusPill { active: false; label: "0 clients"; activeColor: Theme.clrAccent }
+                    StatusPill {
+                        active: rjoyBridge.running
+                        label: rjoyBridge.running ? "Running" : "Stopped"
+                        activeColor: Theme.clrGreen
+                    }
+                    StatusPill {
+                        active: rjoyBridge.clientCount > 0
+                        label: rjoyBridge.clientCount + (rjoyBridge.clientCount === 1 ? " client" : " clients")
+                        activeColor: Theme.clrAccent
+                    }
                 }
 
                 Divider {}
@@ -95,22 +128,36 @@ Item {
                 RowLayout {
                     spacing: 6
                     Label { text: "URL";      color: Theme.clrDim; font.pixelSize: 12; Layout.preferredWidth: 60 }
-                    Label { text: "ws://" + rjoyHost.text + ":" + rjoyPort.text; color: Theme.clrText; font.pixelSize: 12; font.family: "monospace" }
+                    Label {
+                        text: rjoyBridge.running
+                              ? "httpdd://" + rjoyHost.text + ":" + rjoyPort.text
+                              : "—"
+                        color: Theme.clrText; font.pixelSize: 12; font.family: "monospace"
+                    }
                 }
                 RowLayout {
                     spacing: 6
                     Label { text: "Uptime";   color: Theme.clrDim; font.pixelSize: 12; Layout.preferredWidth: 60 }
-                    Label { text: "—"; color: Theme.clrText; font.pixelSize: 12 }
+                    Label {
+                        text: rjoyBridge.running ? fmtUptime(rjoyBridge.uptime) : "—"
+                        color: Theme.clrText; font.pixelSize: 12
+                    }
                 }
                 RowLayout {
                     spacing: 6
                     Label { text: "Sent";     color: Theme.clrDim; font.pixelSize: 12; Layout.preferredWidth: 60 }
-                    Label { text: "—"; color: Theme.clrText; font.pixelSize: 12 }
+                    Label {
+                        text: rjoyBridge.running ? fmtBytes(rjoyBridge.bytesSent) : "—"
+                        color: Theme.clrText; font.pixelSize: 12
+                    }
                 }
                 RowLayout {
                     spacing: 6
                     Label { text: "Received"; color: Theme.clrDim; font.pixelSize: 12; Layout.preferredWidth: 60 }
-                    Label { text: "—"; color: Theme.clrText; font.pixelSize: 12 }
+                    Label {
+                        text: rjoyBridge.running ? fmtBytes(rjoyBridge.bytesReceived) : "—"
+                        color: Theme.clrText; font.pixelSize: 12
+                    }
                 }
             }
         }

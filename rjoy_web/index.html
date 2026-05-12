@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RJoy</title>
+    <script src="htmx.js.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+    <header>
+        <h1>RJoy</h1>
+    </header>
+
+    <section class="card">
+        <div class="conn-bar">
+            <span id="conn-dot" class="dot unknown"></span>
+            <span id="conn-label">Connecting…</span>
+        </div>
+
+        <div id="stats"
+             hx-get="/status"
+             hx-trigger="every 1s"
+             hx-swap="innerHTML">
+        </div>
+    </section>
+</main>
+
+<script>
+    document.body.addEventListener("htmx:afterSwap", function (e) {
+        if (e.detail.target.id !== "stats") return;
+        document.getElementById("conn-dot").className = "dot green";
+        document.getElementById("conn-label").textContent = "Connected";
+    });
+    ["htmx:sendError", "htmx:responseError"].forEach(function (evt) {
+        document.body.addEventListener(evt, function (e) {
+            if (e.detail.target.id !== "stats") return;
+            document.getElementById("conn-dot").className = "dot red";
+            document.getElementById("conn-label").textContent = "Disconnected";
+        });
+    });
+</script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+    --bg:      #16171f;
+    --surface: #21222e;
+    --border:  #2e2f42;
+    --text:    #c9cad8;
+    --dim:     #5a5b72;
+    --accent:  #7b68ee;
+    --green:   #4eca8b;
+    --red:     #f0506e;
+}
+
+body {
+    font-family: system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+main {
+    width: 480px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 8px;
+}
+
+header p {
+    color: var(--dim);
+    line-height: 1.6;
+}
+
+.card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Connection status bar */
+.conn-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: background 0.3s;
+}
+.dot.unknown { background: var(--dim); }
+.dot.green   { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.dot.red     { background: var(--red);   box-shadow: 0 0 6px var(--red); }
+
+/* Stat rows returned by /status */
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border);
+}
+.stat-row:last-child { border-bottom: none; }
+
+.stat-label { color: var(--dim); }
+.stat-val   { font-family: monospace; color: var(--text); }
