@@ -16,8 +16,14 @@
         pythonEnv = python.withPackages (ps: with ps; [
           evdev
           pyinstaller
-		  pyside6
+          pyside6
         ]);
+
+        qtdeclarative = (pkgs.lib.findFirst
+          (p: (p.pname or "") == "qtdeclarative")
+          (throw "qtdeclarative not found in pyside6 buildInputs")
+          pkgs.python3Packages.pyside6.buildInputs).out;
+
       in {
         devShells.default = pkgs.mkShell {
           buildInputs = [
@@ -26,9 +32,9 @@
           ];
 
           shellHook = ''
+            export QML_IMPORT_PATH="${qtdeclarative}/lib/qt-6/qml"
             echo "Run InputLatching.py. sudo or input group required"
           '';
         };
       });
 }
-
