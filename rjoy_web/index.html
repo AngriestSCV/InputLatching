@@ -98,7 +98,7 @@
         });
     }
     function postAxis(idx, val) {
-        post({ type: "axis", index: idx, value: parseInt(val) });
+        post({ type: "axis", index: idx, value: parseFloat(val) });
     }
     function postBtn(idx, val) {
         post({ type: "button", index: idx, value: val });
