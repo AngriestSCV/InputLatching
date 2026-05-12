@@ -95,6 +95,14 @@ Item {
             }
         }
 
+        AppButton {
+            text: "Open in Browser"
+            Layout.fillWidth: true
+            enabled: rjoyBridge.running
+            opacity: rjoyBridge.running ? 1.0 : 0.4
+            onClicked: Qt.openUrlExternally("http://" + rjoyHost.text + ":" + rjoyPort.text)
+        }
+
         // ── Status card ───────────────────────────────────────────────────────
         Rectangle {
             Layout.fillWidth: true
@@ -130,7 +138,7 @@ Item {
                     Label { text: "URL";      color: Theme.clrDim; font.pixelSize: 12; Layout.preferredWidth: 60 }
                     Label {
                         text: rjoyBridge.running
-                              ? "httpdd://" + rjoyHost.text + ":" + rjoyPort.text
+                              ? "http://" + rjoyHost.text + ":" + rjoyPort.text
                               : "—"
                         color: Theme.clrText; font.pixelSize: 12; font.family: "monospace"
                     }
