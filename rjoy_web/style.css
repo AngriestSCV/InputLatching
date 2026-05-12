@@ -177,18 +177,13 @@ header p {
     flex-shrink: 0;
 }
 
-/* Mixed controls list (ini profiles) */
-.controls-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+/* Positioned controls canvas (ini profiles) */
+.controls-canvas {
+    position: relative;
 }
 
-.controls-list .joy-btn {
-    width: 100%;
-    padding: 10px;
-    font-size: 12px;
-    font-family: system-ui, sans-serif;
+.placed {
+    position: absolute;
 }
 
 /* Button grid (used when only buttons are present) */

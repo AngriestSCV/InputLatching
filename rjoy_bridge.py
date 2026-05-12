@@ -209,20 +209,30 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         cfg = configparser.ConfigParser()
         cfg.read(path)
 
+        _BTN_W,    _BTN_H    = 110, 36
+        _SLIDER_W, _SLIDER_H = 280, 36
+
         items = []
+        canvas_w = canvas_h = 0
+
         for section in cfg.sections():
             btype = cfg[section].get("Type", "").strip()
             label = html_mod.escape(section)
+            x = int(cfg[section].get("X", 0))
+            y = int(cfg[section].get("Y", 0))
 
             if btype == "PushButton":
                 btn_idx = int(cfg[section].get("Button", 0))
                 items.append(
-                    f'<button class="joy-btn"'
+                    f'<button class="joy-btn placed"'
+                    f' style="left:{x}px;top:{y}px;width:{_BTN_W}px"'
                     f' onpointerdown="this.setPointerCapture(event.pointerId);this.classList.add(\'active\');postBtn({btn_idx},1)"'
                     f' onpointerup="this.classList.remove(\'active\');postBtn({btn_idx},0)"'
                     f' onpointercancel="this.classList.remove(\'active\');postBtn({btn_idx},0)">'
                     f'{label}</button>'
                 )
+                canvas_w = max(canvas_w, x + _BTN_W)
+                canvas_h = max(canvas_h, y + _BTN_H)
 
             elif btype == "SpringSlider":
                 axis_idx    = int(cfg[section].get("Axis", 0))
@@ -231,7 +241,8 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
                 default_val = float(cfg[section].get("Default", 0))
                 default_str = f"{default_val:.3f}"
                 items.append(
-                    f'<div class="axis-row">'
+                    f'<div class="axis-row placed"'
+                    f' style="left:{x}px;top:{y}px;width:{_SLIDER_W}px">'
                     f'<span class="axis-label">{label}</span>'
                     f'<input type="range" min="{min_val}" max="{max_val}" step="0.001"'
                     f' value="{default_val}" class="axis-slider spring-slider"'
@@ -240,11 +251,13 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
                     f'<span class="axis-val">{default_str}</span>'
                     f'</div>'
                 )
+                canvas_w = max(canvas_w, x + _SLIDER_W)
+                canvas_h = max(canvas_h, y + _SLIDER_H)
 
         self._send_html(
             '<section class="card">'
             '<div class="section-label">CONTROLS</div>'
-            '<div class="controls-list">'
+            f'<div class="controls-canvas" style="width:{canvas_w + 10}px;height:{canvas_h + 10}px">'
             + "".join(items) +
             '</div></section>'
         )
