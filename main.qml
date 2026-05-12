@@ -414,11 +414,143 @@ ApplicationWindow {
 
             // ── RJoy tab ──────────────────────────────────────────────────────
             Item {
-                Label {
-                    anchors.centerIn: parent
-                    text: "To be implemented"
-                    color: clrDim
-                    font.pixelSize: 16
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 14
+                    spacing: 10
+
+                    // ── Server config card ────────────────────────────────────
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: rjoyConfigCol.implicitHeight + 20
+                        color: clrSurface; radius: 10
+                        border.color: clrBorder; border.width: 1
+
+                        ColumnLayout {
+                            id: rjoyConfigCol
+                            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
+                            spacing: 8
+
+                            SectionLabel { text: "SERVER CONFIGURATION" }
+
+                            RowLayout {
+                                spacing: 6
+                                Label { text: "Host"; color: clrDim; font.pixelSize: 12; Layout.preferredWidth: 40 }
+                                TextField {
+                                    id: rjoyHost
+                                    text: "0.0.0.0"
+                                    Layout.fillWidth: true
+                                    color: clrText
+                                    font.pixelSize: 12
+                                    background: Rectangle {
+                                        color: palette.base
+                                        border.color: rjoyHost.activeFocus ? clrAccent : clrBorder
+                                        border.width: 1
+                                        radius: 6
+                                    }
+                                    leftPadding: 8; rightPadding: 8
+                                }
+                            }
+
+                            RowLayout {
+                                spacing: 6
+                                Label { text: "Port"; color: clrDim; font.pixelSize: 12; Layout.preferredWidth: 40 }
+                                TextField {
+                                    id: rjoyPort
+                                    text: "8765"
+                                    Layout.fillWidth: true
+                                    color: clrText
+                                    font.pixelSize: 12
+                                    validator: IntValidator { bottom: 1; top: 65535 }
+                                    background: Rectangle {
+                                        color: palette.base
+                                        border.color: rjoyPort.activeFocus ? clrAccent : clrBorder
+                                        border.width: 1
+                                        radius: 6
+                                    }
+                                    leftPadding: 8; rightPadding: 8
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Transport controls ────────────────────────────────────
+                    RowLayout {
+                        spacing: 8
+                        Layout.fillWidth: true
+                        AppButton {
+                            text: "▶  Start Server"
+                            tint: clrGreen
+                            Layout.fillWidth: true
+                        }
+                        AppButton {
+                            text: "■  Stop Server"
+                            tint: clrRed
+                            Layout.fillWidth: true
+                        }
+                    }
+
+                    // ── Status card ───────────────────────────────────────────
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: rjoyStatusCol.implicitHeight + 20
+                        color: clrSurface; radius: 10
+                        border.color: clrBorder; border.width: 1
+
+                        ColumnLayout {
+                            id: rjoyStatusCol
+                            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
+                            spacing: 8
+
+                            SectionLabel { text: "STATUS" }
+
+                            RowLayout {
+                                spacing: 8
+                                StatusPill {
+                                    id: rjoyStatusPill
+                                    active: false
+                                    label: active ? "Running" : "Stopped"
+                                    activeColor: clrGreen
+                                }
+                                StatusPill {
+                                    active: false
+                                    label: "0 clients"
+                                    activeColor: clrAccent
+                                }
+                            }
+
+                            Divider {}
+
+                            RowLayout {
+                                spacing: 6
+                                Label { text: "URL"; color: clrDim; font.pixelSize: 12; Layout.preferredWidth: 60 }
+                                Label {
+                                    text: "http://" + rjoyHost.text + ":" + rjoyPort.text
+                                    color: clrText; font.pixelSize: 12; font.family: "monospace"
+                                }
+                            }
+
+                            RowLayout {
+                                spacing: 6
+                                Label { text: "Uptime"; color: clrDim; font.pixelSize: 12; Layout.preferredWidth: 60 }
+                                Label { text: "—"; color: clrText; font.pixelSize: 12 }
+                            }
+
+                            RowLayout {
+                                spacing: 6
+                                Label { text: "Sent"; color: clrDim; font.pixelSize: 12; Layout.preferredWidth: 60 }
+                                Label { text: "—"; color: clrText; font.pixelSize: 12 }
+                            }
+
+                            RowLayout {
+                                spacing: 6
+                                Label { text: "Received"; color: clrDim; font.pixelSize: 12; Layout.preferredWidth: 60 }
+                                Label { text: "—"; color: clrText; font.pixelSize: 12 }
+                            }
+                        }
+                    }
+
+                    Item { Layout.fillHeight: true }
                 }
             }
         }
