@@ -1,16 +1,19 @@
 """RJoy HTTP server — virtual joystick + tracking server core + PySide6 bridge."""
 import enum
+import html as html_mod
 import http.server
 import json
 import os
 import threading
 import time
 from dataclasses import dataclass
+from urllib.parse import quote, unquote
 
 from evdev import UInput, AbsInfo, ecodes as e
 from PySide6.QtCore import QObject, Property, Signal, Slot, QTimer
 
-SERVE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rjoy_web")
+SERVE_DIR    = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rjoy_web")
+PROFILES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rjoy_profiles")
 
 # ── Virtual joystick definition ───────────────────────────────────────────────
 
@@ -28,6 +31,10 @@ _AXES = [
     (e.ABS_RUDDER,   _AXIS_RANGE),
 ]
 
+_AXIS_NAMES = ["X", "Y", "Z", "RX", "RY", "RZ", "Throttle", "Rudder"]
+
+
+# ── Command types ─────────────────────────────────────────────────────────────
 
 class CommandType(enum.Enum):
     Button = "button"
@@ -69,6 +76,28 @@ def _command_from_dict(d: dict) -> Command:
         )
     raise ValueError(f"Unknown command type: {kind!r}")
 
+
+# ── Profiles ──────────────────────────────────────────────────────────────────
+
+_DEFAULT_PROFILES = {
+    "Simple":   {"button_count": 8,  "axes": [0, 1, 3, 4]},
+    "Extended": {"button_count": 12, "axes": [0, 1, 2, 3, 4, 5]},
+}
+
+
+def _ensure_default_profiles():
+    os.makedirs(PROFILES_DIR, exist_ok=True)
+    for name, data in _DEFAULT_PROFILES.items():
+        path = os.path.join(PROFILES_DIR, name + ".json")
+        if not os.path.exists(path):
+            with open(path, "w") as f:
+                json.dump(data, f, indent=2)
+
+
+_ensure_default_profiles()
+
+
+# ── Joystick helpers ──────────────────────────────────────────────────────────
 
 def _make_joystick() -> UInput:
     return UInput(
@@ -144,14 +173,27 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/status":
             self._serve_status()
+        elif self.path == "/profiles":
+            self._serve_profile_list_html()
+        elif self.path.startswith("/profiles/") and self.path.endswith("/render"):
+            name = os.path.basename(unquote(self.path[len("/profiles/"):-len("/render")]))
+            self._serve_controls_html(name)
+        elif self.path.startswith("/profiles/"):
+            name = os.path.basename(unquote(self.path[len("/profiles/"):]))
+            self._serve_profile_json(name)
         else:
             super().do_GET()
 
     def do_POST(self):
         if self.path == "/joystick":
             self._handle_joystick()
+        elif self.path.startswith("/profiles/"):
+            name = os.path.basename(unquote(self.path[len("/profiles/"):]))
+            self._save_profile(name)
         else:
             self.send_error(404)
+
+    # ── Joystick ──────────────────────────────────────────────────────────────
 
     def _handle_joystick(self):
         length = int(self.headers.get("Content-Length", 0))
@@ -164,6 +206,105 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
         except Exception as ex:
             self.send_error(400, str(ex))
+
+    # ── Profiles ──────────────────────────────────────────────────────────────
+
+    def _serve_profile_list_html(self):
+        names = sorted(f[:-5] for f in os.listdir(PROFILES_DIR) if f.endswith(".json"))
+        parts = []
+        for i, name in enumerate(names):
+            trigger = "load, click" if i == 0 else "click"
+            active_cls = " active" if i == 0 else ""
+            parts.append(
+                f'<button class="profile-btn{active_cls}"'
+                f' hx-get="/profiles/{quote(name)}/render"'
+                f' hx-target="#controls"'
+                f' hx-swap="innerHTML"'
+                f' hx-trigger="{trigger}">'
+                f'{html_mod.escape(name)}</button>'
+            )
+        self._send_html("".join(parts))
+
+    def _serve_controls_html(self, name: str):
+        path = os.path.join(PROFILES_DIR, name + ".json")
+        if not os.path.isfile(path):
+            self.send_error(404)
+            return
+        with open(path) as f:
+            profile = json.load(f)
+
+        axes_rows = []
+        for idx in profile.get("axes", []):
+            label = html_mod.escape(_AXIS_NAMES[idx] if idx < len(_AXIS_NAMES) else f"Axis {idx}")
+            axes_rows.append(
+                f'<div class="axis-row">'
+                f'<span class="axis-label">{label}</span>'
+                f'<input type="range" min="-32767" max="32767" value="0" class="axis-slider"'
+                f' oninput="postAxis({idx},this.value);this.nextElementSibling.textContent=this.value">'
+                f'<span class="axis-val">0</span>'
+                f'</div>'
+            )
+
+        btns = []
+        for i in range(profile.get("button_count", 0)):
+            btns.append(
+                f'<button class="joy-btn"'
+                f' onpointerdown="this.setPointerCapture(event.pointerId);this.classList.add(\'active\');postBtn({i},1)"'
+                f' onpointerup="this.classList.remove(\'active\');postBtn({i},0)"'
+                f' onpointercancel="this.classList.remove(\'active\');postBtn({i},0)">'
+                f'B{i + 1}</button>'
+            )
+
+        fragment = (
+            '<section class="card">'
+            '<div class="section-label">AXES</div>'
+            + "".join(axes_rows) +
+            '</section>'
+            '<section class="card">'
+            '<div class="section-label">BUTTONS</div>'
+            '<div class="btn-grid">'
+            + "".join(btns) +
+            '</div></section>'
+        )
+        self._send_html(fragment)
+
+    def _serve_profile_json(self, name: str):
+        path = os.path.join(PROFILES_DIR, name + ".json")
+        if not os.path.isfile(path):
+            self.send_error(404)
+            return
+        with open(path) as f:
+            self._send_json(json.load(f))
+
+    def _save_profile(self, name: str):
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length)
+        try:
+            data = json.loads(body)
+            with open(os.path.join(PROFILES_DIR, name + ".json"), "w") as f:
+                json.dump(data, f, indent=2)
+            self.send_response(204)
+            self.end_headers()
+        except Exception as ex:
+            self.send_error(400, str(ex))
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def _send_html(self, fragment: str):
+        body = fragment.encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _send_json(self, obj):
+        body = json.dumps(obj).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def _serve_status(self):
         srv = self.server
@@ -181,12 +322,7 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             f'</div>'
             for label, val in rows
         )
-        body = html_rows.encode()
-        self.send_response(200)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        self._send_html(html_rows)
 
     def log_message(self, fmt, *args):
         pass

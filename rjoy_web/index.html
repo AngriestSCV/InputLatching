@@ -18,16 +18,35 @@
             <span id="conn-dot" class="dot unknown"></span>
             <span id="conn-label">Connecting…</span>
         </div>
-
         <div id="stats"
              hx-get="/status"
              hx-trigger="every 1s"
              hx-swap="innerHTML">
         </div>
     </section>
+
+    <section class="card">
+        <div class="profile-bar">
+            <span class="section-label">PROFILES</span>
+            <div id="profile-btns"
+                 class="profile-btn-row"
+                 hx-get="/profiles"
+                 hx-trigger="load"
+                 hx-swap="innerHTML">
+            </div>
+            <button class="icon-btn"
+                    hx-get="/profiles"
+                    hx-target="#profile-btns"
+                    hx-swap="innerHTML"
+                    title="Refresh profiles">↺</button>
+        </div>
+    </section>
+
+    <div id="controls"></div>
 </main>
 
 <script>
+    // ── Status polling ────────────────────────────────────────────────────────
     document.body.addEventListener("htmx:afterSwap", function (e) {
         if (e.detail.target.id !== "stats") return;
         document.getElementById("conn-dot").className = "dot green";
@@ -40,6 +59,30 @@
             document.getElementById("conn-label").textContent = "Disconnected";
         });
     });
+
+    // ── Active profile highlight ──────────────────────────────────────────────
+    document.body.addEventListener("htmx:afterRequest", function (e) {
+        if (!e.detail.elt.classList.contains("profile-btn")) return;
+        document.querySelectorAll(".profile-btn").forEach(function (b) {
+            b.classList.remove("active");
+        });
+        e.detail.elt.classList.add("active");
+    });
+
+    // ── Joystick helpers (called from server-rendered inline handlers) ─────────
+    function post(payload) {
+        fetch("/joystick", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+    }
+    function postAxis(idx, val) {
+        post({ type: "axis", index: idx, value: parseInt(val) });
+    }
+    function postBtn(idx, val) {
+        post({ type: "button", index: idx, value: val });
+    }
 </script>
 </body>
 </html>

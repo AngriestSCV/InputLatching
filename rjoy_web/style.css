@@ -23,7 +23,7 @@ body {
 }
 
 main {
-    width: 480px;
+    width: min(560px, 100vw - 24px);
     display: flex;
     flex-direction: column;
     gap: 20px;
@@ -82,3 +82,129 @@ header p {
 
 .stat-label { color: var(--dim); }
 .stat-val   { font-family: monospace; color: var(--text); }
+
+/* Profile bar */
+.profile-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.profile-btn-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    flex: 1;
+}
+
+.profile-btn {
+    padding: 5px 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    color: var(--dim);
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.profile-btn:hover {
+    border-color: var(--accent);
+    color: var(--text);
+}
+
+.profile-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+.icon-btn {
+    padding: 5px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--dim);
+    font-size: 16px;
+    cursor: pointer;
+    line-height: 1;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.icon-btn:hover {
+    border-color: var(--accent);
+    color: var(--text);
+}
+
+/* Section label */
+.section-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--dim);
+    margin-bottom: 4px;
+}
+
+/* Axes */
+.axis-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 0;
+}
+
+.axis-label {
+    width: 56px;
+    flex-shrink: 0;
+    color: var(--dim);
+    font-size: 12px;
+}
+
+.axis-slider {
+    flex: 1;
+    accent-color: var(--accent);
+    cursor: pointer;
+    height: 4px;
+}
+
+.axis-val {
+    width: 52px;
+    text-align: right;
+    font-family: monospace;
+    font-size: 11px;
+    color: var(--text);
+    flex-shrink: 0;
+}
+
+/* Button grid */
+.btn-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+    gap: 6px;
+}
+
+.joy-btn {
+    padding: 8px 4px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--dim);
+    font-size: 11px;
+    font-family: monospace;
+    cursor: pointer;
+    user-select: none;
+    touch-action: none;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+
+.joy-btn:hover {
+    border-color: var(--accent);
+    color: var(--text);
+}
+
+.joy-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
