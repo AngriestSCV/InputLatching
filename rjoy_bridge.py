@@ -1,4 +1,5 @@
 """RJoy HTTP server — virtual joystick + tracking server core + PySide6 bridge."""
+import configparser
 import enum
 import html as html_mod
 import http.server
@@ -30,8 +31,6 @@ _AXES = [
     (e.ABS_THROTTLE, _AXIS_RANGE),
     (e.ABS_RUDDER,   _AXIS_RANGE),
 ]
-
-_AXIS_NAMES = ["X", "Y", "Z", "RX", "RY", "RZ", "Throttle", "Rudder"]
 
 
 # ── Command types ─────────────────────────────────────────────────────────────
@@ -75,26 +74,6 @@ def _command_from_dict(d: dict) -> Command:
             ),
         )
     raise ValueError(f"Unknown command type: {kind!r}")
-
-
-# ── Profiles ──────────────────────────────────────────────────────────────────
-
-_DEFAULT_PROFILES = {
-    "Simple":   {"button_count": 8,  "axes": [0, 1, 3, 4]},
-    "Extended": {"button_count": 12, "axes": [0, 1, 2, 3, 4, 5]},
-}
-
-
-def _ensure_default_profiles():
-    os.makedirs(PROFILES_DIR, exist_ok=True)
-    for name, data in _DEFAULT_PROFILES.items():
-        path = os.path.join(PROFILES_DIR, name + ".json")
-        if not os.path.exists(path):
-            with open(path, "w") as f:
-                json.dump(data, f, indent=2)
-
-
-_ensure_default_profiles()
 
 
 # ── Joystick helpers ──────────────────────────────────────────────────────────
@@ -178,18 +157,12 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         elif self.path.startswith("/profiles/") and self.path.endswith("/render"):
             name = os.path.basename(unquote(self.path[len("/profiles/"):-len("/render")]))
             self._serve_controls_html(name)
-        elif self.path.startswith("/profiles/"):
-            name = os.path.basename(unquote(self.path[len("/profiles/"):]))
-            self._serve_profile_json(name)
         else:
             super().do_GET()
 
     def do_POST(self):
         if self.path == "/joystick":
             self._handle_joystick()
-        elif self.path.startswith("/profiles/"):
-            name = os.path.basename(unquote(self.path[len("/profiles/"):]))
-            self._save_profile(name)
         else:
             self.send_error(404)
 
@@ -210,7 +183,9 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
     # ── Profiles ──────────────────────────────────────────────────────────────
 
     def _serve_profile_list_html(self):
-        names = sorted(f[:-5] for f in os.listdir(PROFILES_DIR) if f.endswith(".json"))
+        names = sorted(
+            f[:-4] for f in os.listdir(PROFILES_DIR) if f.endswith(".ini")
+        )
         parts = []
         for i, name in enumerate(names):
             trigger = "load, click" if i == 0 else "click"
@@ -226,67 +201,34 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         self._send_html("".join(parts))
 
     def _serve_controls_html(self, name: str):
-        path = os.path.join(PROFILES_DIR, name + ".json")
+        path = os.path.join(PROFILES_DIR, name + ".ini")
         if not os.path.isfile(path):
             self.send_error(404)
             return
-        with open(path) as f:
-            profile = json.load(f)
-
-        axes_rows = []
-        for idx in profile.get("axes", []):
-            label = html_mod.escape(_AXIS_NAMES[idx] if idx < len(_AXIS_NAMES) else f"Axis {idx}")
-            axes_rows.append(
-                f'<div class="axis-row">'
-                f'<span class="axis-label">{label}</span>'
-                f'<input type="range" min="-32767" max="32767" value="0" class="axis-slider"'
-                f' oninput="postAxis({idx},this.value);this.nextElementSibling.textContent=this.value">'
-                f'<span class="axis-val">0</span>'
-                f'</div>'
-            )
+        cfg = configparser.ConfigParser()
+        cfg.read(path)
 
         btns = []
-        for i in range(profile.get("button_count", 0)):
+        for section in cfg.sections():
+            if cfg[section].get("Type", "").strip() != "PushButton":
+                continue
+            btn_idx = int(cfg[section].get("Button", 0))
+            label = html_mod.escape(section)
             btns.append(
                 f'<button class="joy-btn"'
-                f' onpointerdown="this.setPointerCapture(event.pointerId);this.classList.add(\'active\');postBtn({i},1)"'
-                f' onpointerup="this.classList.remove(\'active\');postBtn({i},0)"'
-                f' onpointercancel="this.classList.remove(\'active\');postBtn({i},0)">'
-                f'B{i + 1}</button>'
+                f' onpointerdown="this.setPointerCapture(event.pointerId);this.classList.add(\'active\');postBtn({btn_idx},1)"'
+                f' onpointerup="this.classList.remove(\'active\');postBtn({btn_idx},0)"'
+                f' onpointercancel="this.classList.remove(\'active\');postBtn({btn_idx},0)">'
+                f'{label}</button>'
             )
 
-        fragment = (
-            '<section class="card">'
-            '<div class="section-label">AXES</div>'
-            + "".join(axes_rows) +
-            '</section>'
+        self._send_html(
             '<section class="card">'
             '<div class="section-label">BUTTONS</div>'
             '<div class="btn-grid">'
             + "".join(btns) +
             '</div></section>'
         )
-        self._send_html(fragment)
-
-    def _serve_profile_json(self, name: str):
-        path = os.path.join(PROFILES_DIR, name + ".json")
-        if not os.path.isfile(path):
-            self.send_error(404)
-            return
-        with open(path) as f:
-            self._send_json(json.load(f))
-
-    def _save_profile(self, name: str):
-        length = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(length)
-        try:
-            data = json.loads(body)
-            with open(os.path.join(PROFILES_DIR, name + ".json"), "w") as f:
-                json.dump(data, f, indent=2)
-            self.send_response(204)
-            self.end_headers()
-        except Exception as ex:
-            self.send_error(400, str(ex))
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -294,14 +236,6 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         body = fragment.encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def _send_json(self, obj):
-        body = json.dumps(obj).encode()
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -315,14 +249,13 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             ("Sent",        _fmt_bytes(srv.bytes_sent)),
             ("Received",    _fmt_bytes(srv.bytes_received)),
         ]
-        html_rows = "".join(
+        self._send_html("".join(
             f'<div class="stat-row">'
             f'<span class="stat-label">{label}</span>'
             f'<span class="stat-val">{val}</span>'
             f'</div>'
             for label, val in rows
-        )
-        self._send_html(html_rows)
+        ))
 
     def log_message(self, fmt, *args):
         pass
