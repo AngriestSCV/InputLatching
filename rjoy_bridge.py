@@ -20,7 +20,8 @@ PROFILES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rjoy_pr
 
 _BUTTONS = list(range(e.BTN_JOYSTICK, e.BTN_JOYSTICK + 40))
 
-_AXIS_RANGE = AbsInfo(value=0, min=-32767, max=32767, fuzz=0, flat=128, resolution=0)
+_AXIS_MAX = 32767
+_AXIS_RANGE = AbsInfo(value=0, min=-_AXIS_MAX, max=_AXIS_MAX, fuzz=0, flat=128, resolution=0)
 _AXES = [
     (e.ABS_X,        _AXIS_RANGE),
     (e.ABS_Y,        _AXIS_RANGE),
@@ -49,7 +50,7 @@ class ButtonCommand:
 @dataclass
 class AxisCommand:
     index: int
-    value: int  # clamped to [-32767, 32767]
+    value: float  # normalised [-1.0, 1.0]; server maps to [-_AXIS_MAX, _AXIS_MAX]
 
 
 @dataclass
@@ -70,7 +71,7 @@ def _command_from_dict(d: dict) -> Command:
             command_type=CommandType.Axis,
             command_value=AxisCommand(
                 index=int(d["index"]),
-                value=max(-32767, min(32767, int(d["value"]))),
+                value=max(-1.0, min(1.0, float(d["value"]))),
             ),
         )
     raise ValueError(f"Unknown command type: {kind!r}")
@@ -95,7 +96,7 @@ def _apply_joystick_command(joystick: UInput, cmd: Command):
     elif cmd.command_type is CommandType.Axis:
         v = cmd.command_value
         if 0 <= v.index < len(_AXES):
-            joystick.write(e.EV_ABS, _AXES[v.index][0], v.value)
+            joystick.write(e.EV_ABS, _AXES[v.index][0], int(v.value * _AXIS_MAX))
             joystick.syn()
 
 
@@ -208,25 +209,43 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         cfg = configparser.ConfigParser()
         cfg.read(path)
 
-        btns = []
+        items = []
         for section in cfg.sections():
-            if cfg[section].get("Type", "").strip() != "PushButton":
-                continue
-            btn_idx = int(cfg[section].get("Button", 0))
+            btype = cfg[section].get("Type", "").strip()
             label = html_mod.escape(section)
-            btns.append(
-                f'<button class="joy-btn"'
-                f' onpointerdown="this.setPointerCapture(event.pointerId);this.classList.add(\'active\');postBtn({btn_idx},1)"'
-                f' onpointerup="this.classList.remove(\'active\');postBtn({btn_idx},0)"'
-                f' onpointercancel="this.classList.remove(\'active\');postBtn({btn_idx},0)">'
-                f'{label}</button>'
-            )
+
+            if btype == "PushButton":
+                btn_idx = int(cfg[section].get("Button", 0))
+                items.append(
+                    f'<button class="joy-btn"'
+                    f' onpointerdown="this.setPointerCapture(event.pointerId);this.classList.add(\'active\');postBtn({btn_idx},1)"'
+                    f' onpointerup="this.classList.remove(\'active\');postBtn({btn_idx},0)"'
+                    f' onpointercancel="this.classList.remove(\'active\');postBtn({btn_idx},0)">'
+                    f'{label}</button>'
+                )
+
+            elif btype == "SpringSlider":
+                axis_idx    = int(cfg[section].get("Axis", 0))
+                min_val     = float(cfg[section].get("Min", -1))
+                max_val     = float(cfg[section].get("Max",  1))
+                default_val = float(cfg[section].get("Default", 0))
+                default_str = f"{default_val:.3f}"
+                items.append(
+                    f'<div class="axis-row">'
+                    f'<span class="axis-label">{label}</span>'
+                    f'<input type="range" min="{min_val}" max="{max_val}" step="0.001"'
+                    f' value="{default_val}" class="axis-slider spring-slider"'
+                    f' data-axis="{axis_idx}" data-default="{default_val}"'
+                    f' oninput="postAxis({axis_idx},+this.value);this.nextElementSibling.textContent=(+this.value).toFixed(3)">'
+                    f'<span class="axis-val">{default_str}</span>'
+                    f'</div>'
+                )
 
         self._send_html(
             '<section class="card">'
-            '<div class="section-label">BUTTONS</div>'
-            '<div class="btn-grid">'
-            + "".join(btns) +
+            '<div class="section-label">CONTROLS</div>'
+            '<div class="controls-list">'
+            + "".join(items) +
             '</div></section>'
         )
 

@@ -69,6 +69,26 @@
         e.detail.elt.classList.add("active");
     });
 
+    // ── Spring slider spring-back ─────────────────────────────────────────────
+    var _springActive = null;
+    document.addEventListener("pointerdown", function (e) {
+        if (e.target.classList.contains("spring-slider")) {
+            _springActive = e.target;
+        }
+    });
+    document.addEventListener("pointerup", function () {
+        if (!_springActive) return;
+        var s = _springActive;
+        _springActive = null;
+        var d = parseFloat(s.dataset.default);
+        var ax = parseInt(s.dataset.axis);
+        setTimeout(function () {
+            s.value = d;
+            postAxis(ax, d);
+            s.nextElementSibling.textContent = d.toFixed(3);
+        }, 0);
+    });
+
     // ── Joystick helpers (called from server-rendered inline handlers) ─────────
     function post(payload) {
         fetch("/joystick", {

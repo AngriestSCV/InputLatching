@@ -177,7 +177,21 @@ header p {
     flex-shrink: 0;
 }
 
-/* Button grid */
+/* Mixed controls list (ini profiles) */
+.controls-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.controls-list .joy-btn {
+    width: 100%;
+    padding: 10px;
+    font-size: 12px;
+    font-family: system-ui, sans-serif;
+}
+
+/* Button grid (used when only buttons are present) */
 .btn-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
