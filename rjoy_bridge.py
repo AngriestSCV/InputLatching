@@ -1,23 +1,97 @@
-"""RJoy HTTP server — tracking server core + PySide6 bridge."""
+"""RJoy HTTP server — virtual joystick + tracking server core + PySide6 bridge."""
+import enum
 import http.server
+import json
 import os
 import threading
 import time
+from dataclasses import dataclass
 
+from evdev import UInput, AbsInfo, ecodes as e
 from PySide6.QtCore import QObject, Property, Signal, Slot, QTimer
 
 SERVE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rjoy_web")
 
+# ── Virtual joystick definition ───────────────────────────────────────────────
 
-class _TrackingHTTPServer(http.server.HTTPServer):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.bytes_sent = 0
-        self.bytes_received = 0
-        self.active_connections = 0
-        self.start_time = time.monotonic()
-        self._lock = threading.Lock()
+_BUTTONS = list(range(e.BTN_JOYSTICK, e.BTN_JOYSTICK + 40))
 
+_AXIS_RANGE = AbsInfo(value=0, min=-32767, max=32767, fuzz=0, flat=128, resolution=0)
+_AXES = [
+    (e.ABS_X,        _AXIS_RANGE),
+    (e.ABS_Y,        _AXIS_RANGE),
+    (e.ABS_Z,        _AXIS_RANGE),
+    (e.ABS_RX,       _AXIS_RANGE),
+    (e.ABS_RY,       _AXIS_RANGE),
+    (e.ABS_RZ,       _AXIS_RANGE),
+    (e.ABS_THROTTLE, _AXIS_RANGE),
+    (e.ABS_RUDDER,   _AXIS_RANGE),
+]
+
+
+class CommandType(enum.Enum):
+    Button = "button"
+    Axis = "axis"
+
+
+@dataclass
+class ButtonCommand:
+    index: int
+    value: int  # 1 = press, 0 = release
+
+
+@dataclass
+class AxisCommand:
+    index: int
+    value: int  # clamped to [-32767, 32767]
+
+
+@dataclass
+class Command:
+    command_type: CommandType
+    command_value: ButtonCommand | AxisCommand
+
+
+def _command_from_dict(d: dict) -> Command:
+    kind = d.get("type")
+    if kind == "button":
+        return Command(
+            command_type=CommandType.Button,
+            command_value=ButtonCommand(index=int(d["index"]), value=int(d["value"])),
+        )
+    if kind == "axis":
+        return Command(
+            command_type=CommandType.Axis,
+            command_value=AxisCommand(
+                index=int(d["index"]),
+                value=max(-32767, min(32767, int(d["value"]))),
+            ),
+        )
+    raise ValueError(f"Unknown command type: {kind!r}")
+
+
+def _make_joystick() -> UInput:
+    return UInput(
+        {e.EV_KEY: _BUTTONS, e.EV_ABS: _AXES},
+        name="RJoy Virtual Joystick",
+        version=0x1,
+    )
+
+
+def _apply_joystick_command(joystick: UInput, cmd: Command):
+    if cmd.command_type is CommandType.Button:
+        v = cmd.command_value
+        if 0 <= v.index < len(_BUTTONS):
+            joystick.write(e.EV_KEY, _BUTTONS[v.index], v.value)
+            joystick.syn()
+    elif cmd.command_type is CommandType.Axis:
+        v = cmd.command_value
+        if 0 <= v.index < len(_AXES):
+            joystick.write(e.EV_ABS, _AXES[v.index][0], v.value)
+            joystick.syn()
+
+
+# ── HTTP server ───────────────────────────────────────────────────────────────
 
 def _fmt_bytes(n: int) -> str:
     if n < 1024:        return f"{n} B"
@@ -32,6 +106,17 @@ def _fmt_uptime(secs: float) -> str:
     if h: return f"{h}h {m}m {s}s"
     if m: return f"{m}m {s}s"
     return f"{s}s"
+
+
+class _TrackingHTTPServer(http.server.HTTPServer):
+    def __init__(self, *args, joystick: UInput, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.joystick = joystick
+        self.bytes_sent = 0
+        self.bytes_received = 0
+        self.active_connections = 0
+        self.start_time = time.monotonic()
+        self._lock = threading.Lock()
 
 
 class _Handler(http.server.SimpleHTTPRequestHandler):
@@ -56,18 +141,29 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         with self.server._lock:
             self.server.active_connections = max(0, self.server.active_connections - 1)
 
-    def handle_one_request(self):
-        super().handle_one_request()
-        length = int(self.headers.get("Content-Length", 0)) if hasattr(self, "headers") and self.headers else 0
-        if length:
-            with self.server._lock:
-                self.server.bytes_received += length
-
     def do_GET(self):
         if self.path == "/status":
             self._serve_status()
         else:
             super().do_GET()
+
+    def do_POST(self):
+        if self.path == "/joystick":
+            self._handle_joystick()
+        else:
+            self.send_error(404)
+
+    def _handle_joystick(self):
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length)
+        with self.server._lock:
+            self.server.bytes_received += length
+        try:
+            _apply_joystick_command(self.server.joystick, _command_from_dict(json.loads(body)))
+            self.send_response(204)
+            self.end_headers()
+        except Exception as ex:
+            self.send_error(400, str(ex))
 
     def _serve_status(self):
         srv = self.server
@@ -96,28 +192,30 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         pass
 
 
-class RJoyServer:
-    """Threaded HTTP server that serves rjoy_web/ with live stats."""
+# ── Server core ───────────────────────────────────────────────────────────────
 
+class RJoyServer:
     def __init__(self):
         self._httpd: _TrackingHTTPServer | None = None
         self._thread: threading.Thread | None = None
-        self._start_time: float | None = None
+        self._joystick: UInput | None = None
 
     def start(self, host: str = "0.0.0.0", port: int = 8765):
         if self.running:
             return
-        self._httpd = _TrackingHTTPServer((host, int(port)), _Handler)
+        self._joystick = _make_joystick()
+        self._httpd = _TrackingHTTPServer((host, int(port)), _Handler, joystick=self._joystick)
         self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)
         self._thread.start()
-        self._start_time = time.monotonic()
 
     def stop(self):
         if self._httpd:
             self._httpd.shutdown()
             self._httpd = None
         self._thread = None
-        self._start_time = None
+        if self._joystick:
+            self._joystick.close()
+            self._joystick = None
 
     @property
     def running(self) -> bool:
@@ -125,7 +223,7 @@ class RJoyServer:
 
     @property
     def uptime(self) -> float:
-        return (time.monotonic() - self._start_time) if self._start_time else 0.0
+        return (time.monotonic() - self._httpd.start_time) if self._httpd else 0.0
 
     @property
     def bytes_sent(self) -> int:
@@ -140,11 +238,13 @@ class RJoyServer:
         return self._httpd.active_connections if self._httpd else 0
 
 
+# ── PySide6 bridge ────────────────────────────────────────────────────────────
+
 class RJoyBridge(QObject):
-    runningChanged      = Signal()
-    clientCountChanged  = Signal()
-    uptimeChanged       = Signal()
-    bytesSentChanged    = Signal()
+    runningChanged       = Signal()
+    clientCountChanged   = Signal()
+    uptimeChanged        = Signal()
+    bytesSentChanged     = Signal()
     bytesReceivedChanged = Signal()
 
     def __init__(self, parent=None):
