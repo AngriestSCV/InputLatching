@@ -209,7 +209,7 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         cfg = configparser.ConfigParser()
         cfg.read(path)
 
-        _BTN_W,    _BTN_H    = 110, 36
+        _BTN_W,    _BTN_H    = 90, 90
         _SLIDER_W, _SLIDER_H = 280, 36
 
         items = []
@@ -225,7 +225,7 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
                 btn_idx = int(cfg[section].get("Button", 0))
                 items.append(
                     f'<button class="joy-btn placed"'
-                    f' style="left:{x}px;top:{y}px;width:{_BTN_W}px"'
+                    f' style="left:{x}px;top:{y}px;width:{_BTN_W}px;height:{_BTN_H}px"'
                     f' onpointerdown="this.setPointerCapture(event.pointerId);this.classList.add(\'active\');postBtn({btn_idx},1)"'
                     f' onpointerup="this.classList.remove(\'active\');postBtn({btn_idx},0)"'
                     f' onpointercancel="this.classList.remove(\'active\');postBtn({btn_idx},0)">'
