@@ -177,6 +177,23 @@ header p {
     flex-shrink: 0;
 }
 
+.slider-reset-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--dim);
+    font-size: 40px;
+    cursor: pointer;
+    width: 90px;
+    height: 90px;
+    flex-shrink: 0;
+    transition: color 0.15s, border-color 0.15s;
+}
+.slider-reset-btn:hover {
+    border-color: var(--accent);
+    color: var(--text);
+}
+
 /* Positioned controls canvas (ini profiles) */
 .controls-canvas {
     position: relative;

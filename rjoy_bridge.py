@@ -344,6 +344,36 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
                 canvas_w = max(canvas_w, x + _SLIDER_W)
                 canvas_h = max(canvas_h, y + _SLIDER_H)
 
+            elif btype == "Slider":
+                axis_idx    = int(cfg[section].get("Axis", 0))
+                min_val     = float(cfg[section].get("Min", -1))
+                max_val     = float(cfg[section].get("Max",  1))
+                default_val = float(cfg[section].get("Default", 0))
+                default_str = f"{default_val:.3f}"
+                reset_js = (
+                    "(function(b){"
+                    "var inp=b.parentElement.querySelector('input[type=range]');"
+                    "var d=parseFloat(inp.dataset.default);"
+                    "inp.value=d;"
+                    "postAxis(parseInt(inp.dataset.axis),d);"
+                    "inp.nextElementSibling.textContent=d.toFixed(3);"
+                    "})(this)"
+                )
+                items.append(
+                    f'<div class="axis-row placed"'
+                    f' style="left:{x}px;top:{y}px;width:{_SLIDER_W}px">'
+                    f'<span class="axis-label">{label}</span>'
+                    f'<input type="range" min="{min_val}" max="{max_val}" step="0.001"'
+                    f' value="{default_val}" class="axis-slider"'
+                    f' data-axis="{axis_idx}" data-default="{default_val}"'
+                    f' oninput="postAxis({axis_idx},+this.value);this.nextElementSibling.textContent=(+this.value).toFixed(3)">'
+                    f'<span class="axis-val">{default_str}</span>'
+                    f'<button class="slider-reset-btn" onclick="{reset_js}">&#x21BA;</button>'
+                    f'</div>'
+                )
+                canvas_w = max(canvas_w, x + _SLIDER_W)
+                canvas_h = max(canvas_h, y + _BTN_H)
+
         self._send_html(
             '<section class="card">'
             '<div class="section-label">CONTROLS</div>'
