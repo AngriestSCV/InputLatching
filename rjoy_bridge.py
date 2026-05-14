@@ -374,6 +374,30 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
                 canvas_w = max(canvas_w, x + _SLIDER_W)
                 canvas_h = max(canvas_h, y + _BTN_H)
 
+            elif btype == "DualAxis":
+                axis_x   = int(cfg[section].get("AxisX", 0))
+                axis_y   = int(cfg[section].get("AxisY", 1))
+                recenter_raw = cfg[section].get("Recenter", "true").strip().lower()
+                recenter = "true" if recenter_raw in ("true", "1", "yes") else "false"
+                _JOYSTICK_SIZE = 160
+                reset_btn_html = (
+                    '<button class="joystick-reset-btn slider-reset-btn">&#x21BA;</button>'
+                    if recenter == "false" else ""
+                )
+                items.append(
+                    f'<div class="joystick-widget placed"'
+                    f' style="left:{x}px;top:{y}px">'
+                    f'<div class="joystick-outer"'
+                    f' data-axis-x="{axis_x}" data-axis-y="{axis_y}" data-recenter="{recenter}">'
+                    f'<div class="joystick-thumb"></div>'
+                    f'</div>'
+                    f'{reset_btn_html}'
+                    f'</div>'
+                )
+                widget_w = _JOYSTICK_SIZE + 96 + 6 if recenter == "false" else _JOYSTICK_SIZE
+                canvas_w = max(canvas_w, x + widget_w)
+                canvas_h = max(canvas_h, y + _JOYSTICK_SIZE)
+
         self._send_html(
             '<section class="card">'
             '<div class="section-label">CONTROLS</div>'

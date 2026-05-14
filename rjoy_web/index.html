@@ -69,6 +69,55 @@
         e.detail.elt.classList.add("active");
     });
 
+    // ── Dual-axis joystick ────────────────────────────────────────────────────
+    function initJoysticks() {
+        document.querySelectorAll(".joystick-outer").forEach(function (outer) {
+            if (outer.dataset.joystickInit) return;
+            outer.dataset.joystickInit = "1";
+            var thumb = outer.querySelector(".joystick-thumb");
+            var axisX = parseInt(outer.dataset.axisX);
+            var axisY = parseInt(outer.dataset.axisY);
+            var recenter = outer.dataset.recenter === "true";
+            var outerR = outer.offsetWidth / 2;
+            var thumbR = thumb.offsetWidth / 2;
+            var maxDist = outerR - thumbR;
+            var dragging = false;
+
+            function moveThumb(x, y) {
+                var dist = Math.sqrt(x * x + y * y);
+                if (dist > maxDist) { x = x / dist * maxDist; y = y / dist * maxDist; }
+                thumb.style.transform = "translate(" + x + "px," + y + "px)";
+                postAxis(axisX,  x / maxDist);
+                postAxis(axisY,  y / maxDist);
+            }
+
+            thumb.addEventListener("pointerdown", function (e) {
+                e.preventDefault();
+                thumb.setPointerCapture(e.pointerId);
+                dragging = true;
+            });
+            thumb.addEventListener("pointermove", function (e) {
+                if (!dragging) return;
+                var r = outer.getBoundingClientRect();
+                moveThumb(e.clientX - r.left - outerR, e.clientY - r.top - outerR);
+            });
+            function endDrag() {
+                if (!dragging) return;
+                dragging = false;
+                if (recenter) moveThumb(0, 0);
+            }
+            thumb.addEventListener("pointerup",     endDrag);
+            thumb.addEventListener("pointercancel", endDrag);
+
+            var resetBtn = outer.parentElement.querySelector(".joystick-reset-btn");
+            if (resetBtn) resetBtn.addEventListener("click", function () { moveThumb(0, 0); });
+        });
+    }
+
+    document.body.addEventListener("htmx:afterSwap", function (e) {
+        if (e.detail.target.id === "controls") initJoysticks();
+    });
+
     // ── Spring slider spring-back ─────────────────────────────────────────────
     var _springActive = null;
     document.addEventListener("pointerdown", function (e) {
