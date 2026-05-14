@@ -300,7 +300,7 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         cfg.read(path)
 
         _BTN_W,    _BTN_H    = 90, 90
-        _SLIDER_W, _SLIDER_H = 280, 36
+        _SLIDER_W, _SLIDER_H = 280, 44
 
         items = []
         canvas_w = canvas_h = 0

@@ -165,7 +165,7 @@ header p {
     flex: 1;
     accent-color: var(--accent);
     cursor: pointer;
-    height: 4px;
+    height: 28px;
 }
 
 .axis-val {
