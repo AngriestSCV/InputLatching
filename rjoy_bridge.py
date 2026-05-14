@@ -456,8 +456,12 @@ class RJoyServer:
     def stop(self):
         if self._httpd:
             self._httpd.shutdown()
+        if self._thread:
+            self._thread.join()
+            self._thread = None
+        if self._httpd:
+            self._httpd.server_close()
             self._httpd = None
-        self._thread = None
         if self._joystick:
             self._joystick.close()
             self._joystick = None
