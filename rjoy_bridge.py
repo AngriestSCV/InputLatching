@@ -10,125 +10,12 @@ import time
 from dataclasses import dataclass
 from urllib.parse import quote, unquote
 
-import select
-import struct
-
 from PySide6.QtCore import QObject, Property, Signal, Slot, QTimer
+
+from hid_joystick_linux import Hid_Joystick
 
 SERVE_DIR    = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rjoy_web")
 PROFILES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rjoy_profiles")
-
-# ── Virtual joystick (UHID) ───────────────────────────────────────────────────
-
-_UHID_CREATE2  = 11
-_UHID_DESTROY  = 1
-_UHID_START    = 2
-_UHID_STOP     = 3
-_UHID_INPUT2   = 12
-_UHID_EVT_SIZE = 4376  # sizeof(struct uhid_event) __packed__
-
-# HID report descriptor: 32 buttons (1-bit each) + 8 signed 16-bit axes
-_REPORT_DESCRIPTOR = bytes([
-    0x05, 0x01, 0x09, 0x04, 0xa1, 0x01,              # UsagePage(Desktop), Usage(Joystick), Collection(App)
-    0x05, 0x09, 0x19, 0x01, 0x29, 0x20,              # UsagePage(Button), UsageMin(1), UsageMax(32)
-    0x15, 0x00, 0x25, 0x01, 0x95, 0x20, 0x75, 0x01, 0x81, 0x02,  # LogMin(0),LogMax(1),Count(32),Size(1),Input
-    0x05, 0x01,                                       # UsagePage(Desktop)
-    0x09, 0x30, 0x09, 0x31, 0x09, 0x32, 0x09, 0x33, # Usage(X,Y,Z,Rx)
-    0x09, 0x34, 0x09, 0x35, 0x09, 0x36, 0x09, 0x37, # Usage(Ry,Rz,Slider,Dial)
-    0x16, 0x01, 0x80, 0x26, 0xff, 0x7f,              # LogMin(-32767), LogMax(32767)
-    0x95, 0x08, 0x75, 0x10, 0x81, 0x02,              # Count(8), Size(16), Input
-    0xc0,                                             # EndCollection
-])
-
-
-class UHIDJoystick:
-    def __init__(self):
-        self._fd: int | None = None
-        self._thread: threading.Thread | None = None
-        self._running = False
-        self._started = False
-        self._buttons = 0       # 32-bit bitmask
-        self._axes    = [0] * 8 # int16 each
-        self._lock    = threading.Lock()
-
-    def open(self):
-        self._fd = os.open('/dev/uhid', os.O_RDWR | os.O_CLOEXEC)
-        self._running = True
-        self._thread = threading.Thread(target=self._event_loop, daemon=True)
-        self._thread.start()
-        self._send_create()
-
-    def close(self):
-        self._running = False
-        if self._fd is not None:
-            try:
-                self._send_destroy()
-            except OSError:
-                pass
-            os.close(self._fd)
-            self._fd = None
-
-    def set_button(self, index: int, value: int):
-        if not 0 <= index < 32:
-            return
-        with self._lock:
-            if value:
-                self._buttons |= 1 << index
-            else:
-                self._buttons &= ~(1 << index)
-            self._flush()
-
-    def set_axis(self, index: int, value: float):
-        if not 0 <= index < 8:
-            return
-        with self._lock:
-            self._axes[index] = max(-32767, min(32767, int(value * 32767)))
-            self._flush()
-
-    def _flush(self):
-        if not self._started or self._fd is None:
-            return
-        report  = struct.pack('<I', self._buttons) + struct.pack('<8h', *self._axes)
-        payload = struct.pack('<H', len(report)) + report
-        self._write_event(_UHID_INPUT2, payload)
-
-    def _send_create(self):
-        rd      = _REPORT_DESCRIPTOR
-        name    = b'RJoy Virtual Joystick'
-        payload = (
-            name.ljust(128, b'\x00') +
-            b'\x00' * 64 +                   # phys
-            b'\x00' * 64 +                   # uniq
-            struct.pack('<HH', len(rd), 3) + # rd_size, bus=BUS_USB
-            struct.pack('<III', 0x045e, 0x028e, 0x0110) +  # vendor, product, version
-            struct.pack('<I',  0) +           # country
-            rd.ljust(4096, b'\x00')
-        )
-        self._write_event(_UHID_CREATE2, payload)
-
-    def _send_destroy(self):
-        self._write_event(_UHID_DESTROY, b'')
-
-    def _write_event(self, event_type: int, payload: bytes):
-        buf = struct.pack('<I', event_type) + payload
-        os.write(self._fd, buf.ljust(_UHID_EVT_SIZE, b'\x00')[:_UHID_EVT_SIZE])
-
-    def _event_loop(self):
-        while self._running:
-            r, _, _ = select.select([self._fd], [], [], 0.5)
-            if not r:
-                continue
-            try:
-                data = os.read(self._fd, _UHID_EVT_SIZE)
-            except OSError:
-                break
-            if len(data) >= 4:
-                ev = struct.unpack('<I', data[:4])[0]
-                if ev == _UHID_START:
-                    self._started = True
-                elif ev == _UHID_STOP:
-                    self._started = False
-
 
 # ── Command types ─────────────────────────────────────────────────────────────
 
@@ -175,13 +62,13 @@ def _command_from_dict(d: dict) -> Command:
 
 # ── Joystick helpers ──────────────────────────────────────────────────────────
 
-def _make_joystick() -> UHIDJoystick:
-    j = UHIDJoystick()
+def _make_joystick() -> Hid_Joystick:
+    j = Hid_Joystick()
     j.open()
     return j
 
 
-def _apply_joystick_command(joystick: UHIDJoystick, cmd: Command):
+def _apply_joystick_command(joystick: Hid_Joystick, cmd: Command):
     if cmd.command_type is CommandType.Button:
         v = cmd.command_value
         joystick.set_button(v.index, v.value)
@@ -208,7 +95,7 @@ def _fmt_uptime(secs: float) -> str:
 
 
 class _TrackingHTTPServer(http.server.HTTPServer):
-    def __init__(self, *args, joystick: UHIDJoystick, **kwargs):
+    def __init__(self, *args, joystick: Hid_Joystick, **kwargs):
         super().__init__(*args, **kwargs)
         self.joystick = joystick
         self.bytes_sent = 0
@@ -443,7 +330,7 @@ class RJoyServer:
     def __init__(self):
         self._httpd: _TrackingHTTPServer | None = None
         self._thread: threading.Thread | None = None
-        self._joystick: UHIDJoystick | None = None
+        self._joystick: Hid_Joystick | None = None
 
     def start(self, host: str = "0.0.0.0", port: int = 8765):
         if self.running:

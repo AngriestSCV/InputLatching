@@ -38,6 +38,7 @@ class Bridge(QObject):
         self._trigger_held = False
         self._running = False
         self._auto_click_keys = []
+        self._saved_trigger_code = None
         self.populate_devices()
 
         self.input_controller = InputController()
@@ -85,7 +86,7 @@ class Bridge(QObject):
         saved = [{"name": d.name, "phys": d.phys} for d in self.input_controller.devices]
         os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
         with open(CONFIG_PATH, "w") as f:
-            json.dump({"devices": saved}, f)
+            json.dump({"devices": saved, "trigger_code": self.input_controller.trigger_code}, f)
 
     def load_devices(self):
         if not os.path.exists(CONFIG_PATH):
@@ -109,6 +110,14 @@ class Bridge(QObject):
                         self.append_log(f"Could not restore {entry['name']}: {ex}")
                 else:
                     self.append_log(f"Device not found: {entry['name']}")
+            trigger_code = data.get("trigger_code")
+            if trigger_code is not None:
+                self.input_controller.trigger_code = trigger_code
+                self._saved_trigger_code = trigger_code
+                name = (ecodes.keys.get(trigger_code) or ecodes.BTN.get(trigger_code) or str(trigger_code))
+                self._trigger = name
+                self.triggerChanged.emit()
+                self.append_log(f"Restored trigger key: {name}")
         except Exception as ex:
             self.append_log(f"Could not load saved devices: {ex}")
 
@@ -188,6 +197,9 @@ class Bridge(QObject):
 
         code = state.get("trigger_code")
         name = (ecodes.keys.get(code) or ecodes.BTN.get(code) or str(code))
+        if code != self._saved_trigger_code:
+            self._saved_trigger_code = code
+            self.save_devices()
 
         self._latched = latched_str
         self.latchedChanged.emit()
