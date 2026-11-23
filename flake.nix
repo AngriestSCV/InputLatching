@@ -33,7 +33,7 @@
 
           shellHook = ''
             export QML_IMPORT_PATH="${qtdeclarative}/lib/qt-6/qml"
-            echo "Run InputLatching.py. sudo or input group required"
+            echo "Run InputLatching.py. input group required"
           '';
         };
       });
