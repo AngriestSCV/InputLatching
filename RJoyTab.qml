@@ -103,6 +103,38 @@ Item {
             onClicked: Qt.openUrlExternally("http://" + rjoyHost.text + ":" + rjoyPort.text)
         }
 
+        // ── Local addresses card ──────────────────────────────────────────────
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: addrCol.implicitHeight + 20
+            color: Theme.clrSurface; radius: 10
+            border.color: Theme.clrBorder; border.width: 1
+
+            ColumnLayout {
+                id: addrCol
+                anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
+                spacing: 6
+
+                SectionLabel { text: "THIS COMPUTER" }
+
+                Repeater {
+                    model: rjoyBridge.localAddresses
+                    RowLayout {
+                        spacing: 6
+                        Label {
+                            text: modelData.split(":")[0]
+                            color: Theme.clrDim; font.pixelSize: 12
+                            Layout.preferredWidth: 80
+                        }
+                        Label {
+                            text: modelData.split(":").slice(1).join(":").trim()
+                            color: Theme.clrText; font.pixelSize: 12; font.family: "monospace"
+                        }
+                    }
+                }
+            }
+        }
+
         // ── Status card ───────────────────────────────────────────────────────
         Rectangle {
             Layout.fillWidth: true

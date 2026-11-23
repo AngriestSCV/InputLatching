@@ -46,6 +46,19 @@
 </main>
 
 <script>
+    // ── Screen wake lock ─────────────────────────────────────────────────────
+    var _wakeLock = null;
+    async function _acquireWakeLock() {
+        if (!navigator.wakeLock) return;
+        try {
+            _wakeLock = await navigator.wakeLock.request("screen");
+        } catch (e) {}
+    }
+    _acquireWakeLock();
+    document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "visible") _acquireWakeLock();
+    });
+
     // ── Status polling ────────────────────────────────────────────────────────
     document.body.addEventListener("htmx:afterSwap", function (e) {
         if (e.detail.target.id !== "stats") return;

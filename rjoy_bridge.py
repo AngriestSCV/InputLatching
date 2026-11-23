@@ -5,6 +5,8 @@ import html as html_mod
 import http.server
 import json
 import os
+import re
+import subprocess
 import threading
 import time
 from dataclasses import dataclass
@@ -324,6 +326,27 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         pass
 
 
+# ── Network helpers ──────────────────────────────────────────────────────────
+
+def _get_local_ips() -> list[str]:
+    """Return 'iface: ip' strings for all active non-loopback IPv4 interfaces."""
+    try:
+        out = subprocess.check_output(
+            ['ip', '-4', '-o', 'addr', 'show'],
+            text=True, timeout=2
+        )
+        results = []
+        for line in out.splitlines():
+            m = re.match(r'^\d+:\s+(\S+)\s+inet\s+(\d+\.\d+\.\d+\.\d+)', line)
+            if m:
+                iface, ip = m.group(1), m.group(2)
+                if not ip.startswith('127.'):
+                    results.append(f"{iface}: {ip}")
+        return results
+    except Exception:
+        return []
+
+
 # ── Server core ───────────────────────────────────────────────────────────────
 
 class RJoyServer:
@@ -377,15 +400,17 @@ class RJoyServer:
 # ── PySide6 bridge ────────────────────────────────────────────────────────────
 
 class RJoyBridge(QObject):
-    runningChanged       = Signal()
-    clientCountChanged   = Signal()
-    uptimeChanged        = Signal()
-    bytesSentChanged     = Signal()
-    bytesReceivedChanged = Signal()
+    runningChanged        = Signal()
+    clientCountChanged    = Signal()
+    uptimeChanged         = Signal()
+    bytesSentChanged      = Signal()
+    bytesReceivedChanged  = Signal()
+    localAddressesChanged = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._server = RJoyServer()
+        self._local_addresses: list[str] = _get_local_ips()
         self._timer = QTimer(self)
         self._timer.setInterval(1000)
         self._timer.timeout.connect(self._poll)
@@ -397,8 +422,15 @@ class RJoyBridge(QObject):
         self.bytesSentChanged.emit()
         self.bytesReceivedChanged.emit()
 
+    def _refresh_addresses(self):
+        addrs = _get_local_ips()
+        if addrs != self._local_addresses:
+            self._local_addresses = addrs
+            self.localAddressesChanged.emit()
+
     @Slot(str, int)
     def startServer(self, host: str, port: int):
+        self._refresh_addresses()
         self._server.start(host, port)
         self._timer.start()
         self._poll()
@@ -428,3 +460,7 @@ class RJoyBridge(QObject):
     @Property(int, notify=bytesReceivedChanged)
     def bytesReceived(self) -> int:
         return self._server.bytes_received
+
+    @Property("QStringList", notify=localAddressesChanged)
+    def localAddresses(self) -> list[str]:
+        return self._local_addresses
